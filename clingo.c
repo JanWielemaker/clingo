@@ -1,3 +1,4 @@
+#define PL_ARITY_AS_SIZE 1
 #include <SWI-Stream.h>
 #include <SWI-Prolog.h>
 #include <cclingo.h>
@@ -8,6 +9,19 @@ static clingo_module_t *module;
 static atom_t ATOM_inf;
 static atom_t ATOM_sup;
 static functor_t FUNCTOR_hash1;
+
+static bool_t
+exists_function(const char *name)
+{ return TRUE;
+}
+
+static clingo_error_t
+call_function(char const *, clingo_value_span_t, clingo_value_span_t *);
+
+static clingo_context_t clingo_context =
+{ exists_function,
+  call_function
+};
 
 		 /*******************************
 		 *	  SYMBOL WRAPPER	*
@@ -146,7 +160,7 @@ pl_clingo_ground(term_t ccontrol, term_t options)
   if ( !get_clingo(ccontrol, &ctl) )
     return FALSE;
 
-  CLINGO_TRY(clingo_control_ground(ctl, part_span, 0));
+  CLINGO_TRY(clingo_control_ground(ctl, part_span, &clingo_context));
 
   return TRUE;
 }
@@ -259,6 +273,136 @@ pl_clingo_solve(term_t ccontrol, term_t Model, control_t h)
       return TRUE;
     }
   }
+}
+
+
+		 /*******************************
+		 *	     CALLBACK		*
+		 *******************************/
+
+static clingo_error_t
+get_value(term_t t, clingo_value_t *val)
+{ switch(PL_term_type(t))
+  { case PL_INTEGER:
+    { int i;
+
+      if ( PL_get_integer(t, &i) )
+      { clingo_value_new_num(i, val);
+	return 0;
+      }
+      return -1;
+    }
+    case PL_ATOM:
+    { char *s;
+      size_t len;
+
+      if ( PL_get_nchars(t, &len, &s, PL_ATOM|REP_UTF8|CVT_EXCEPTION) )
+	return clingo_value_new_id(s, FALSE, val); /* no sign */
+      return -1;
+    }
+    case PL_STRING:
+    { char *s;
+      size_t len;
+
+      if ( PL_get_nchars(t, &len, &s, PL_STRING|REP_UTF8|CVT_EXCEPTION) )
+	return clingo_value_new_str(s, val);
+      return -1;
+    }
+    case PL_TERM:
+    { atom_t name;
+      size_t arity;				/* TBD: -atom, #const */
+
+      if ( PL_get_name_arity(t, &name, &arity) )
+      { clingo_value_span_t span;
+	term_t arg = PL_new_term_ref();
+	const char *id = PL_atom_chars(name);		/* TBD: errors */
+	clingo_value_t *values;
+	int rc, i;
+
+	if ( !(values = malloc(sizeof(*span.begin)*arity)) )
+	  return clingo_error_bad_alloc;
+
+	for(i=0; i<arity; i++)
+	{ _PL_get_arg(i+1, t, arg);
+	  if ( (rc=get_value(arg, &values[i])) != 0 )
+	  { free(values);
+	    return rc;
+	  }
+	}
+	PL_reset_term_refs(arg);
+
+	span.size = arity;
+	span.begin = values;
+	rc = clingo_value_new_fun(id, span, FALSE, val);
+	free(values);
+
+	return rc;
+      }
+
+      return -1;
+    }
+    default:
+      PL_type_error("clingo_value", t);
+      return -1;
+  }
+}
+
+
+static clingo_error_t
+call_function(char const *name,
+	      clingo_value_span_t in,
+	      clingo_value_span_t *out)
+{ static predicate_t pred = 0;
+  fid_t fid = 0;
+  qid_t qid = 0;
+
+  if ( !pred )
+    pred = PL_predicate("inject_values", 3, "clingo");
+
+  if ( (fid = PL_open_foreign_frame()) )
+  { term_t av = PL_new_term_refs(3);
+    size_t allocated = 0;
+    size_t count = 0;
+    clingo_value_t *values = NULL;
+
+    PL_put_atom_chars(av+0, name);
+    PL_put_nil(av+1);
+    if ( (qid=PL_open_query(NULL, PL_Q_PASS_EXCEPTION, pred, av)) )
+    { while(PL_next_solution(qid))
+      { if ( count+1 > allocated )
+	{ clingo_value_t *new;
+	  allocated = allocated ? allocated*2 : 32;
+	  if ( (new=realloc(values, sizeof(*values)*allocated)) )
+	  { values = new;
+	  } else
+	  { free(values);
+	    PL_resource_error("memory");
+	    goto error;
+	  }
+	}
+
+	if ( !get_value(av+2, &values[count++]) )
+	  goto error;
+      }
+      if ( PL_exception(0) )
+	goto error;
+      PL_close_query(qid);
+    }
+    PL_close_foreign_frame(fid);
+
+    out->size = count;
+    out->begin = values;
+
+    return 0;
+  }
+
+error:
+  if ( qid )
+    PL_close_query(qid);
+  if ( fid )
+    PL_close_foreign_frame(fid);
+
+  return -1;
 }
 
 
