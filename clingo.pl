@@ -6,3 +6,6 @@
 	  ]).
 
 :- use_foreign_library(clingo).
+
+inject_values(Name, _In, Out) :-
+	call(Name, Out).

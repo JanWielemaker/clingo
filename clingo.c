@@ -109,7 +109,8 @@ get_clingo(term_t t, clingo_control_t **ccontrol)
 #define CLINGO_TRY(g) \
 	{ int _rc = (g); \
 	  if ( _rc != 0 ) \
-	  { Sdprintf("Clingo: %s\n", clingo_error_str(_rc)); \
+	  { if ( _rc > 0 ) \
+	      Sdprintf("Clingo: %s\n", clingo_error_str(_rc)); \
 	    return FALSE; \
 	  } \
 	}
@@ -296,7 +297,7 @@ get_value(term_t t, clingo_value_t *val)
     { char *s;
       size_t len;
 
-      if ( PL_get_nchars(t, &len, &s, PL_ATOM|REP_UTF8|CVT_EXCEPTION) )
+      if ( PL_get_nchars(t, &len, &s, PL_ATOM|PL_STRING|REP_UTF8|CVT_EXCEPTION) )
 	return clingo_value_new_id(s, FALSE, val); /* no sign */
       return -1;
     }
@@ -355,6 +356,7 @@ call_function(char const *name,
 { static predicate_t pred = 0;
   fid_t fid = 0;
   qid_t qid = 0;
+  clingo_error_t rc;
 
   if ( !pred )
     pred = PL_predicate("inject_values", 3, "clingo");
@@ -377,15 +379,18 @@ call_function(char const *name,
 	  } else
 	  { free(values);
 	    PL_resource_error("memory");
+	    rc = -1;
 	    goto error;
 	  }
 	}
 
-	if ( !get_value(av+2, &values[count++]) )
+	if ( (rc=get_value(av+2, &values[count++])) )
 	  goto error;
       }
       if ( PL_exception(0) )
+      { rc = -1;
 	goto error;
+      }
       PL_close_query(qid);
     }
     PL_close_foreign_frame(fid);
@@ -402,7 +407,7 @@ error:
   if ( fid )
     PL_close_foreign_frame(fid);
 
-  return -1;
+  return rc;
 }
 
 
