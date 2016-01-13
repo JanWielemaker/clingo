@@ -209,7 +209,7 @@ unify_model(term_t t, clingo_model_t *model)
   for (it = atoms.begin, ie = it + atoms.size; it != ie; ++it)
   { PL_put_variable(tmp);
 
-    if ( unify_value(tmp, *it) ||
+    if ( !unify_value(tmp, *it) ||
 	 !PL_unify_list(tail, head, tail) ||
 	 !PL_unify(head, tmp) )
     { clingo_free((void*)atoms.begin);
@@ -238,7 +238,11 @@ pl_clingo_solve(term_t ccontrol, term_t Model, control_t h)
     next:
       CLINGO_TRY(clingo_solve_iter_next(it, &model));
       if ( model )
-      { unify_model(Model, model);
+      { if ( !unify_model(Model, model) )
+	{ if ( PL_exception(0) )
+	    return FALSE;
+	  goto next;
+	}
 	PL_retry_address(it);
       } else
       { clingo_solve_iter_close(it);
