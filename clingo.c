@@ -5,6 +5,9 @@
 #include <string.h>
 
 static clingo_module_t *module;
+static atom_t ATOM_inf;
+static atom_t ATOM_sup;
+static functor_t FUNCTOR_hash1;
 
 		 /*******************************
 		 *	  SYMBOL WRAPPER	*
@@ -149,10 +152,73 @@ pl_clingo_ground(term_t ccontrol, term_t options)
 }
 
 
+static int
+unify_value(term_t t, clingo_value_t v)
+{ switch( clingo_value_type(v) )
+  { case clingo_value_type_num:
+      return PL_unify_integer(t, clingo_value_num(v));
+    case clingo_value_type_str:
+      return PL_unify_chars(t, PL_STRING|REP_UTF8, (size_t)-1,
+			    clingo_value_str(v));
+    case clingo_value_type_id:
+      return PL_unify_chars(t, PL_ATOM|REP_UTF8, (size_t)-1,
+			    clingo_value_name(v));
+    case clingo_value_type_inf:
+      return PL_unify_term(t, PL_FUNCTOR, FUNCTOR_hash1,
+			   PL_ATOM, ATOM_inf);
+    case clingo_value_type_sup:
+      return PL_unify_term(t, PL_FUNCTOR, FUNCTOR_hash1,
+			   PL_ATOM, ATOM_sup);
+    case clingo_value_type_fun:
+    { atom_t name = PL_new_atom(clingo_value_name(v));
+      clingo_value_span_t args = clingo_value_args(v);
+
+      if ( PL_unify_functor(t, PL_new_functor(name, args.size)) )
+      { term_t arg = PL_new_term_ref();
+	clingo_value_t const *it, *ie;
+	int i;
+
+	PL_unregister_atom(name);
+	for(i=1, it = args.begin, ie = it + args.size; it != ie; ++it, i++)
+	{ _PL_get_arg(i, t, arg);
+	  if ( !unify_value(arg, *it) )
+	    return FALSE;
+	}
+
+	return TRUE;
+      }
+
+      return FALSE;
+    }
+    default:
+      assert(0);
+      return FALSE;
+  }
+}
+
 
 static int
 unify_model(term_t t, clingo_model_t *model)
-{ return PL_unify_bool(t, TRUE);
+{ clingo_value_span_t atoms;
+  clingo_value_t const *it, *ie;
+  term_t tail = PL_copy_term_ref(t);
+  term_t head = PL_new_term_ref();
+  term_t tmp = PL_new_term_ref();
+
+  CLINGO_TRY(clingo_model_atoms(model, clingo_show_type_atoms, &atoms));
+  for (it = atoms.begin, ie = it + atoms.size; it != ie; ++it)
+  { PL_put_variable(tmp);
+
+    if ( unify_value(tmp, *it) ||
+	 !PL_unify_list(tail, head, tail) ||
+	 !PL_unify(head, tmp) )
+    { clingo_free((void*)atoms.begin);
+      return FALSE;
+    }
+  }
+
+  clingo_free((void*)atoms.begin);
+  return PL_unify_nil(tail);
 }
 
 
@@ -195,6 +261,10 @@ pl_clingo_solve(term_t ccontrol, term_t Model, control_t h)
 install_t
 install_clingo(void)
 { clingo_module_new(&module);
+
+  ATOM_sup = PL_new_atom("sup");
+  ATOM_inf = PL_new_atom("inf");
+  FUNCTOR_hash1 = PL_new_functor(PL_new_atom("#"), 1);
 
   PL_register_foreign("clingo_new", 2, pl_clingo_new, 0);
   PL_register_foreign("clingo_add", 2, pl_clingo_add, 0);
