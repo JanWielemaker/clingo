@@ -89,19 +89,106 @@ get_clingo(term_t t, clingo_control_t **ccontrol)
 		 *	    PREDICATES		*
 		 *******************************/
 
+#define CLINGO_TRY(g) \
+	{ int _rc = (g); \
+	  if ( _rc != 0 ) \
+	  { Sdprintf("Clingo: %s\n", clingo_error_str(_rc)); \
+	    return FALSE; \
+	  } \
+	}
+
 static foreign_t
-pl_clingo_control_new(term_t ccontrol, term_t options)
-{ clingo_control_t *cct;
-  char const *argv[] = { "Clingo", NULL };
+pl_clingo_new(term_t ccontrol, term_t options)
+{ clingo_control_t *ctl;
+  char const *argv[] = { "Clingo", "0", NULL };
   clingo_wrapper *ar;
 
-  clingo_control_new(module, 1, argv, &cct);
+  clingo_control_new(module, 2, argv, &ctl);
   ar = PL_malloc(sizeof(*ar));
   memset(ar, 0, sizeof(*ar));
   ar->magic = CLINGO_MAGIC;
-  ar->control = cct;
+  ar->control = ctl;
 
   return PL_unify_blob(ccontrol, ar, sizeof(*ar), &clingo_blob);
+}
+
+
+static foreign_t
+pl_clingo_add(term_t ccontrol, term_t program)
+{ char *s;
+  size_t len;
+  clingo_control_t *ctl;
+
+  if ( get_clingo(ccontrol, &ctl) &&
+       PL_get_nchars(program, &len, &s,
+		     CVT_ATOM|CVT_STRING|CVT_LIST|REP_UTF8|
+		     CVT_EXCEPTION|BUF_DISCARDABLE) )
+  { char const *base_params[] = { 0 };
+
+    CLINGO_TRY(clingo_control_add(ctl, "base", base_params, s));
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
+
+static foreign_t
+pl_clingo_ground(term_t ccontrol, term_t options)
+{ clingo_control_t *ctl;
+  clingo_value_t empty[] = {};
+  clingo_part_t part_vec[] = { {"base", { empty, 0 } } };
+  clingo_part_span_t part_span = { part_vec, 1 };
+
+  if ( !get_clingo(ccontrol, &ctl) )
+    return FALSE;
+
+  CLINGO_TRY(clingo_control_ground(ctl, part_span, 0));
+
+  return TRUE;
+}
+
+
+
+static int
+unify_model(term_t t, clingo_model_t *model)
+{ return PL_unify_bool(t, TRUE);
+}
+
+
+static foreign_t
+pl_clingo_solve(term_t ccontrol, term_t Model, control_t h)
+{ clingo_solve_iter_t *it;
+
+  switch( PL_foreign_control(h) )
+  { case PL_FIRST_CALL:
+    { clingo_control_t *ctl;
+      clingo_model_t *model;
+
+      if ( !get_clingo(ccontrol, &ctl) )
+	return FALSE;
+
+      CLINGO_TRY(clingo_control_solve_iter(ctl, &it));
+    next:
+      CLINGO_TRY(clingo_solve_iter_next(it, &model));
+      if ( model )
+      { unify_model(Model, model);
+	PL_retry_address(it);
+      } else
+      { clingo_solve_iter_close(it);
+	return FALSE;
+      }
+    }
+    case PL_REDO:
+    { it = PL_foreign_context_address(h);
+      goto next;
+    }
+    case PL_PRUNED:
+    { it = PL_foreign_context_address(h);
+      clingo_solve_iter_close(it);
+      return TRUE;
+    }
+  }
 }
 
 
@@ -109,5 +196,8 @@ install_t
 install_clingo(void)
 { clingo_module_new(&module);
 
-  PL_register_foreign("clingo_control_new", 2, pl_clingo_control_new, 0);
+  PL_register_foreign("clingo_new", 2, pl_clingo_new, 0);
+  PL_register_foreign("clingo_add", 2, pl_clingo_add, 0);
+  PL_register_foreign("clingo_ground", 2, pl_clingo_ground, 0);
+  PL_register_foreign("clingo_solve", 2, pl_clingo_solve, PL_FA_NONDETERMINISTIC);
 }
