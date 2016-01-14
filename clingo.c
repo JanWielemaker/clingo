@@ -12,6 +12,8 @@ static atom_t ATOM_minus;
 static atom_t ATOM_hash;
 static functor_t FUNCTOR_hash1;
 
+static clingo_error_t get_value(term_t t, clingo_value_t *val, int minus);
+
 static bool_t
 exists_function(const char *name)
 { return TRUE;
@@ -150,8 +152,7 @@ get_null_terminated_string(term_t t, char **s, int flags)
 
 static foreign_t
 pl_clingo_add(term_t ccontrol, term_t params, term_t program)
-{ char *prog, prog_name;
-  size_t len;
+{ char *prog;
   clingo_control_t *ctl;
   atom_t name;
   size_t arity;
@@ -201,19 +202,86 @@ out:
 }
 
 
+static int
+get_params(term_t t, clingo_part_t *pv)
+{ atom_t name;
+  size_t arity;
+
+  if ( PL_get_name_arity(t, &name, &arity) )
+  { term_t arg = PL_new_term_ref();
+    clingo_value_t *values;
+
+    if ( !(values = malloc(sizeof(*pv->params.begin)*arity)) )
+      return PL_resource_error("memory");
+
+    for(size_t i=0; i<arity; arity++)
+    { int rc;
+
+      _PL_get_arg(i+1, t, arg);
+
+      rc = get_value(arg, &values[i], FALSE);
+      if ( rc )
+      { free(values);
+	if ( rc > 0 )
+	  Sdprintf("Clingo: %s\n", clingo_error_str(rc));
+	return FALSE;
+      }
+    }
+
+    pv->params.size = arity;
+    pv->params.begin = values;
+    pv->name = PL_atom_chars(name);
+  }
+
+  return PL_type_error("callable", t);
+}
+
+
 static foreign_t
-pl_clingo_ground(term_t ccontrol, term_t options)
+pl_clingo_ground(term_t ccontrol, term_t parts)
 { clingo_control_t *ctl;
-  clingo_value_t empty[] = {};
-  clingo_part_t part_vec[] = { {"base", { empty, 0 } } };
-  clingo_part_span_t part_span = { part_vec, 1 };
+  clingo_part_span_t part_span;
+  clingo_part_t *part_vec = NULL;
+  size_t plen = 0;
+  int rc;
 
   if ( !get_clingo(ccontrol, &ctl) )
     return FALSE;
+  switch( PL_skip_list(parts, 0, &plen) )
+  { case PL_LIST:
+    { term_t tail = PL_copy_term_ref(parts);
+      term_t head = PL_new_term_ref();
 
-  CLINGO_TRY(clingo_control_ground(ctl, part_span, &clingo_context));
+      if ( !(part_vec = malloc(sizeof(*part_vec)*plen)) )
+	return PL_resource_error("memory");
+      memset(part_vec, 0, sizeof(*part_vec)*plen);
+      for(size_t i=0; PL_get_list(tail, head, tail); i++)
+      { if ( !get_params(head, &part_vec[i]) )
+	{ rc = FALSE;
+	  goto out;
+	}
+      }
+    }
+    default:
+      return PL_type_error("list", parts);
+  }
 
-  return TRUE;
+  part_span.begin = part_vec;
+  part_span.size = plen;
+
+  rc = clingo_control_ground(ctl, part_span, &clingo_context);
+  if ( rc > 0 )
+    Sdprintf("Clingo: %s\n", clingo_error_str(rc));
+  rc = !rc;
+
+out:
+  if ( part_vec )
+  { for(size_t i; i<plen; i++)
+      free((void*)part_vec[i].params.begin);
+    free(part_vec);
+  }
+
+  return rc;
 }
 
 
@@ -327,6 +395,7 @@ pl_clingo_solve(term_t ccontrol, term_t Model, control_t h)
       goto next;
     }
     case PL_PRUNED:
+    default:
     { it = PL_foreign_context_address(h);
       clingo_solve_iter_close(it);
       return TRUE;
