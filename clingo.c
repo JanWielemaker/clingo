@@ -133,23 +133,71 @@ pl_clingo_new(term_t ccontrol, term_t options)
 }
 
 
-static foreign_t
-pl_clingo_add(term_t ccontrol, term_t program)
-{ char *s;
-  size_t len;
-  clingo_control_t *ctl;
+static int
+get_null_terminated_string(term_t t, char **s, int flags)
+{ size_t len;
 
-  if ( get_clingo(ccontrol, &ctl) &&
-       PL_get_nchars(program, &len, &s,
-		     CVT_ATOM|CVT_STRING|CVT_LIST|REP_UTF8|
-		     CVT_EXCEPTION|BUF_DISCARDABLE) )
-  { char const *base_params[] = { 0 };
-
-    CLINGO_TRY(clingo_control_add(ctl, "base", base_params, s));
-    return TRUE;
+  if ( PL_get_nchars(t, &len, s, flags|REP_UTF8|CVT_EXCEPTION) )
+  { if ( len == strlen(*s) )
+      return TRUE;
+    return PL_domain_error("null_terminated_string", t);
   }
 
   return FALSE;
+}
+
+#define FAST_PARAMS 10
+
+static foreign_t
+pl_clingo_add(term_t ccontrol, term_t params, term_t program)
+{ char *prog, prog_name;
+  size_t len;
+  clingo_control_t *ctl;
+  atom_t name;
+  size_t arity;
+  char *param_buf[FAST_PARAMS];
+  char **prog_params = param_buf;
+  term_t arg = PL_new_term_ref();
+  int rc;
+
+  if ( !get_clingo(ccontrol, &ctl) )
+    return FALSE;
+
+  if ( !PL_get_name_arity(params, &name, &arity) )
+    return PL_type_error("callable", params);
+
+  if ( arity+1 > FAST_PARAMS &&
+       !(prog_params = malloc(sizeof(char*)*arity)) )
+    return PL_resource_error("memory");
+
+  for(size_t i=0; i<arity; i++)
+  { _PL_get_arg(i+1, params, arg);
+    if ( !get_null_terminated_string(arg, &prog_params[i], CVT_ATOM) )
+    { rc = FALSE;
+      goto out;
+    }
+  }
+  prog_params[arity] = NULL;
+
+  if ( !get_null_terminated_string(program, &prog,
+				   CVT_ATOM|CVT_STRING|CVT_LIST|
+				   BUF_DISCARDABLE) )
+  { rc = FALSE;
+    goto out;
+  }
+
+  rc = clingo_control_add(ctl,
+			  PL_atom_chars(name),
+			  (const char**)prog_params, prog);
+  if ( rc > 0 )
+    Sdprintf("Clingo: %s\n", clingo_error_str(rc));
+  rc = !rc;
+
+out:
+  if ( prog_params != param_buf )
+    free(prog_params);
+
+  return rc;
 }
 
 
@@ -453,7 +501,7 @@ install_clingo(void)
   FUNCTOR_hash1 = PL_new_functor(ATOM_hash, 1);
 
   PL_register_foreign("clingo_new", 2, pl_clingo_new, 0);
-  PL_register_foreign("clingo_add", 2, pl_clingo_add, 0);
+  PL_register_foreign("clingo_add", 3, pl_clingo_add, 0);
   PL_register_foreign("clingo_ground", 2, pl_clingo_ground, 0);
   PL_register_foreign("clingo_solve", 2, pl_clingo_solve, PL_FA_NONDETERMINISTIC);
 }
