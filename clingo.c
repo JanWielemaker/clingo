@@ -8,6 +8,8 @@
 static clingo_module_t *module;
 static atom_t ATOM_inf;
 static atom_t ATOM_sup;
+static atom_t ATOM_minus;
+static atom_t ATOM_hash;
 static functor_t FUNCTOR_hash1;
 
 static bool_t
@@ -290,7 +292,7 @@ pl_clingo_solve(term_t ccontrol, term_t Model, control_t h)
 		 *******************************/
 
 static clingo_error_t
-get_value(term_t t, clingo_value_t *val)
+get_value(term_t t, clingo_value_t *val, int minus)
 { switch(PL_term_type(t))
   { case PL_INTEGER:
     { int i;
@@ -306,7 +308,7 @@ get_value(term_t t, clingo_value_t *val)
       size_t len;
 
       if ( PL_get_nchars(t, &len, &s, CVT_ATOM|REP_UTF8|CVT_EXCEPTION) )
-	return clingo_value_new_id(s, FALSE, val); /* no sign */
+	return clingo_value_new_id(s, minus, val); /* no sign */
       return -1;
     }
     case PL_STRING:
@@ -322,30 +324,51 @@ get_value(term_t t, clingo_value_t *val)
       size_t arity;				/* TBD: -atom, #const */
 
       if ( PL_get_name_arity(t, &name, &arity) )
-      { clingo_value_span_t span;
-	term_t arg = PL_new_term_ref();
-	const char *id = PL_atom_chars(name);		/* TBD: errors */
-	clingo_value_t *values;
-	int rc, i;
+      { term_t arg = PL_new_term_ref();
 
-	if ( !(values = malloc(sizeof(*span.begin)*arity)) )
-	  return clingo_error_bad_alloc;
+	if ( name == ATOM_minus && arity == 1 )
+	{ return get_value(arg, val, TRUE);
+	} else if ( name == ATOM_hash && arity == 1 )
+	{ atom_t a;
 
-	for(i=0; i<arity; i++)
-	{ _PL_get_arg(i+1, t, arg);
-	  if ( (rc=get_value(arg, &values[i])) != 0 )
-	  { free(values);
-	    return rc;
+	  _PL_get_arg(1, t, arg);
+	  if ( PL_get_atom_ex(arg, &a) )
+	  { if ( a == ATOM_inf )
+	    { clingo_value_new_inf(val);
+	      return 0;
+	    } else if ( a == ATOM_sup )
+	    { clingo_value_new_sup(val);
+	      return 0;
+	    } else
+	      PL_domain_error("clingo_keyword", arg);
 	  }
+
+	  return -1;
+	} else
+	{ clingo_value_span_t span;
+	  const char *id = PL_atom_chars(name);		/* TBD: errors */
+	  clingo_value_t *values;
+	  int rc, i;
+
+	  if ( !(values = malloc(sizeof(*span.begin)*arity)) )
+	    return clingo_error_bad_alloc;
+
+	  for(i=0; i<arity; i++)
+	  { _PL_get_arg(i+1, t, arg);
+	    if ( (rc=get_value(arg, &values[i], FALSE)) != 0 )
+	    { free(values);
+	      return rc;
+	    }
+	  }
+	  PL_reset_term_refs(arg);
+
+	  span.size = arity;
+	  span.begin = values;
+	  rc = clingo_value_new_fun(id, span, minus, val);
+	  free(values);
+
+	  return rc;
 	}
-	PL_reset_term_refs(arg);
-
-	span.size = arity;
-	span.begin = values;
-	rc = clingo_value_new_fun(id, span, FALSE, val);
-	free(values);
-
-	return rc;
       }
 
       return -1;
@@ -392,7 +415,7 @@ call_function(char const *name,
 	  }
 	}
 
-	if ( (rc=get_value(av+2, &values[count++])) )
+	if ( (rc=get_value(av+2, &values[count++], FALSE)) )
 	  goto error;
       }
       if ( PL_exception(0) )
@@ -425,7 +448,9 @@ install_clingo(void)
 
   ATOM_sup = PL_new_atom("sup");
   ATOM_inf = PL_new_atom("inf");
-  FUNCTOR_hash1 = PL_new_functor(PL_new_atom("#"), 1);
+  ATOM_minus = PL_new_atom("-");
+  ATOM_hash = PL_new_atom("#");
+  FUNCTOR_hash1 = PL_new_functor(ATOM_hash, 1);
 
   PL_register_foreign("clingo_new", 2, pl_clingo_new, 0);
   PL_register_foreign("clingo_add", 2, pl_clingo_add, 0);
