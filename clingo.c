@@ -30,9 +30,14 @@ call_function(char const *, clingo_value_span_t, void *, clingo_value_span_t *);
 
 #define CLINGO_MAGIC 76432248
 
+typedef struct clingo_env
+{ clingo_control_t *	control;	/* Underlying stream */
+  int			flags;		/* Misc flags  */
+} clingo_env;
+
 typedef struct clingo_wrapper
 { atom_t		symbol;		/* Associated symbol */
-  clingo_control_t *	control;	/* Underlying stream */
+  clingo_env	       *clingo;
   int			magic;
 } clingo_wrapper;
 
@@ -49,7 +54,11 @@ release_clingo(atom_t symbol)
 { clingo_wrapper *ar = PL_blob_data(symbol, NULL, NULL);
 
   assert(ar->magic == CLINGO_MAGIC);
-  clingo_control_free(ar->control);
+  if ( ar->clingo )
+  { clingo_control_free(ar->clingo->control);
+    PL_free(ar->clingo);
+    ar->clingo = NULL;
+  }
   PL_free(ar);
 
   return TRUE;
@@ -86,7 +95,7 @@ static PL_blob_t clingo_blob =
 
 
 static int
-get_clingo(term_t t, clingo_control_t **ccontrol)
+get_clingo(term_t t, clingo_env **ccontrol)
 { PL_blob_t *type;
   void *data;
 
@@ -94,7 +103,7 @@ get_clingo(term_t t, clingo_control_t **ccontrol)
   { clingo_wrapper *ar = data;
 
     assert(ar->magic == CLINGO_MAGIC);
-    *ccontrol = ar->control;
+    *ccontrol = ar->clingo;
 
     return TRUE;
   }
@@ -125,8 +134,10 @@ pl_clingo_new(term_t ccontrol, term_t options)
   clingo_control_new(module, 2, argv, &ctl);
   ar = PL_malloc(sizeof(*ar));
   memset(ar, 0, sizeof(*ar));
+  ar->clingo = PL_malloc(sizeof(*ar->clingo));
+  memset(ar->clingo, 0, sizeof(*ar->clingo));
   ar->magic = CLINGO_MAGIC;
-  ar->control = ctl;
+  ar->clingo->control = ctl;
 
   return PL_unify_blob(ccontrol, ar, sizeof(*ar), &clingo_blob);
 }
@@ -150,7 +161,7 @@ get_null_terminated_string(term_t t, char **s, int flags)
 static foreign_t
 pl_clingo_add(term_t ccontrol, term_t params, term_t program)
 { char *prog;
-  clingo_control_t *ctl;
+  clingo_env *ctl;
   atom_t name;
   size_t arity;
   char *param_buf[FAST_PARAMS];
@@ -184,7 +195,7 @@ pl_clingo_add(term_t ccontrol, term_t params, term_t program)
     goto out;
   }
 
-  rc = clingo_control_add(ctl,
+  rc = clingo_control_add(ctl->control,
 			  PL_atom_chars(name),
 			  (const char**)prog_params, prog);
   if ( rc > 0 )
@@ -238,7 +249,7 @@ get_params(term_t t, clingo_part_t *pv)
 
 static foreign_t
 pl_clingo_ground(term_t ccontrol, term_t parts)
-{ clingo_control_t *ctl;
+{ clingo_env *ctl;
   clingo_part_span_t part_span;
   clingo_part_t *part_vec = NULL;
   size_t plen = 0;
@@ -269,7 +280,7 @@ pl_clingo_ground(term_t ccontrol, term_t parts)
   part_span.begin = part_vec;
   part_span.size = plen;
 
-  rc = clingo_control_ground(ctl, part_span, call_function, NULL);
+  rc = clingo_control_ground(ctl->control, part_span, call_function, NULL);
   if ( rc > 0 )
     Sdprintf("Clingo: %s\n", clingo_error_str(rc));
   rc = !rc;
@@ -287,7 +298,7 @@ out:
 
 static foreign_t
 pl_clingo_assign_external(term_t ccontrol, term_t Atom, term_t Value)
-{ clingo_control_t *ctl;
+{ clingo_env *ctl;
   clingo_value_t atom;
   clingo_truth_value_t value;
   int bv;
@@ -300,21 +311,21 @@ pl_clingo_assign_external(term_t ccontrol, term_t Atom, term_t Value)
   else if ( PL_get_bool_ex(Value, &bv) )
     value = bv ? clingo_truth_value_true : clingo_truth_value_false;
 
-  CLINGO_TRY(clingo_control_assign_external(ctl, atom, value));
+  CLINGO_TRY(clingo_control_assign_external(ctl->control, atom, value));
   return TRUE;
 }
 
 
 static foreign_t
 pl_clingo_release_external(term_t ccontrol, term_t Atom)
-{ clingo_control_t *ctl;
+{ clingo_env *ctl;
   clingo_value_t atom;
 
   if ( !get_clingo(ccontrol, &ctl) )
     return FALSE;
 
   CLINGO_TRY(get_value(Atom, &atom, FALSE));
-  CLINGO_TRY(clingo_control_release_external(ctl, atom));
+  CLINGO_TRY(clingo_control_release_external(ctl->control, atom));
 
   return TRUE;
 }
@@ -448,7 +459,7 @@ pl_clingo_solve(term_t ccontrol,
 
   switch( PL_foreign_control(h) )
   { case PL_FIRST_CALL:
-    { clingo_control_t *ctl;
+    { clingo_env *ctl;
       clingo_model_t *model;
       clingo_symbolic_literal_span_t assump_span;
       clingo_symbolic_literal_t *assump_vec = NULL;
@@ -484,7 +495,7 @@ pl_clingo_solve(term_t ccontrol,
 
       assump_span.size = alen;
       assump_span.begin = assump_vec;
-      rc = clingo_control_solve_iter(ctl, &assump_span, &it);
+      rc = clingo_control_solve_iter(ctl->control, &assump_span, &it);
       if ( rc > 0 )
 	Sdprintf("Clingo: %s\n", clingo_error_str(rc));
       rc = !rc;
