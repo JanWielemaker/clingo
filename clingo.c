@@ -32,6 +32,7 @@ call_function(char const *, clingo_value_span_t, void *, clingo_value_span_t *);
 
 typedef struct clingo_env
 { clingo_control_t *	control;	/* Underlying stream */
+  clingo_value_t       *values;		/* call_function() values */
   int			flags;		/* Misc flags  */
 } clingo_env;
 
@@ -56,6 +57,8 @@ release_clingo(atom_t symbol)
   assert(ar->magic == CLINGO_MAGIC);
   if ( ar->clingo )
   { clingo_control_free(ar->clingo->control);
+    if ( ar->clingo->values )
+      free(ar->clingo->values);
     PL_free(ar->clingo);
     ar->clingo = NULL;
   }
@@ -280,7 +283,11 @@ pl_clingo_ground(term_t ccontrol, term_t parts)
   part_span.begin = part_vec;
   part_span.size = plen;
 
-  rc = clingo_control_ground(ctl->control, part_span, call_function, NULL);
+  rc = clingo_control_ground(ctl->control, part_span, call_function, ctl);
+  if ( ctl->values )
+  { free(ctl->values);
+    ctl->values = NULL;
+  }
   if ( rc > 0 )
     Sdprintf("Clingo: %s\n", clingo_error_str(rc));
   rc = !rc;
@@ -640,9 +647,15 @@ call_function(char const *name,
   fid_t fid = 0;
   qid_t qid = 0;
   clingo_error_t rc;
+  clingo_env *ctl = closure;
 
   if ( !pred )
     pred = PL_predicate("inject_values", 3, "clingo");
+
+  if ( ctl->values )
+  { free(ctl->values);
+    ctl->values = NULL;
+  }
 
   if ( (fid = PL_open_foreign_frame()) )
   { term_t av = PL_new_term_refs(3);
@@ -671,7 +684,8 @@ call_function(char const *name,
 	  goto error;
       }
       if ( PL_exception(0) )
-      { rc = -1;
+      { free(values);
+	rc = -1;
 	goto error;
       }
       PL_close_query(qid);
@@ -680,6 +694,7 @@ call_function(char const *name,
 
     out->size = count;
     out->begin = values;
+    ctl->values = values;
 
     return 0;
   }
