@@ -297,7 +297,7 @@ get_value(term_t t, clingo_value_t *val)
     { char *s;
       size_t len;
 
-      if ( PL_get_nchars(t, &len, &s, PL_ATOM|PL_STRING|REP_UTF8|CVT_EXCEPTION) )
+      if ( PL_get_nchars(t, &len, &s, CVT_ATOM|REP_UTF8|CVT_EXCEPTION) )
 	return clingo_value_new_id(s, FALSE, val); /* no sign */
       return -1;
     }
@@ -305,7 +305,7 @@ get_value(term_t t, clingo_value_t *val)
     { char *s;
       size_t len;
 
-      if ( PL_get_nchars(t, &len, &s, PL_STRING|REP_UTF8|CVT_EXCEPTION) )
+      if ( PL_get_nchars(t, &len, &s, CVT_STRING|REP_UTF8|CVT_EXCEPTION) )
 	return clingo_value_new_str(s, val);
       return -1;
     }
