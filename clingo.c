@@ -395,8 +395,12 @@ pl_clingo_solve(term_t ccontrol, term_t assumptions, term_t Model, control_t h)
 	    return PL_resource_error("memory");
 	  memset(assump_vec, 0, sizeof(*assump_vec)*alen);
 	  for(size_t i=0; PL_get_list(tail, head, tail); i++)
-	  { if ( !get_assumption(head, &assump_vec[i]) )
-	    { rc = FALSE;
+	  { int crc;
+
+	    if ( (crc=get_assumption(head, &assump_vec[i])) )
+	    { if ( crc > 0 )
+		Sdprintf("Clingo: %s\n", clingo_error_str(crc));
+	      rc = FALSE;
 	      goto out;
 	    }
 	  }
