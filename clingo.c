@@ -214,7 +214,7 @@ get_params(term_t t, clingo_part_t *pv)
     if ( !(values = malloc(sizeof(*pv->params.begin)*arity)) )
       return PL_resource_error("memory");
 
-    for(size_t i=0; i<arity; arity++)
+    for(size_t i=0; i<arity; i++)
     { int rc;
 
       _PL_get_arg(i+1, t, arg);
@@ -231,6 +231,8 @@ get_params(term_t t, clingo_part_t *pv)
     pv->params.size = arity;
     pv->params.begin = values;
     pv->name = PL_atom_chars(name);
+
+    return TRUE;
   }
 
   return PL_type_error("callable", t);
@@ -261,6 +263,7 @@ pl_clingo_ground(term_t ccontrol, term_t parts)
 	  goto out;
 	}
       }
+      break;
     }
     default:
       return PL_type_error("list", parts);
