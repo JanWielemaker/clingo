@@ -56,7 +56,8 @@ release_clingo(atom_t symbol)
 
   assert(ar->magic == CLINGO_MAGIC);
   if ( ar->clingo )
-  { clingo_control_free(ar->clingo->control);
+  { if ( ar->clingo->control )
+      clingo_control_free(ar->clingo->control);
     if ( ar->clingo->values )
       free(ar->clingo->values);
     PL_free(ar->clingo);
@@ -143,6 +144,27 @@ pl_clingo_new(term_t ccontrol, term_t options)
   ar->clingo->control = ctl;
 
   return PL_unify_blob(ccontrol, ar, sizeof(*ar), &clingo_blob);
+}
+
+
+static foreign_t
+pl_clingo_close(term_t ccontrol)
+{ clingo_env *ctl;
+
+  if ( !get_clingo(ccontrol, &ctl) )
+    return FALSE;
+
+  if ( ctl->control )
+  { clingo_control_t *c = ctl->control;
+    clingo_value_t *v = ctl->values;
+
+    if ( __sync_bool_compare_and_swap(&ctl->control, c, NULL) )
+      clingo_control_free(c);
+    if ( __sync_bool_compare_and_swap(&ctl->values, v, NULL) )
+      free(v);
+  }
+
+  return TRUE;
 }
 
 
@@ -410,7 +432,6 @@ unify_model(term_t t, int show, clingo_model_t *model)
 
   CLINGO_TRY(clingo_model_atoms(model, show, &atoms));
   rc = unify_list_from_span(t, &atoms);
-  clingo_free((void*)atoms.begin);
 
   return rc;
 }
@@ -726,6 +747,7 @@ install_clingo(void)
   FUNCTOR_tilde1 = PL_new_functor(PL_new_atom("~"), 1);
 
   PL_register_foreign("clingo_new", 2, pl_clingo_new, 0);
+  PL_register_foreign("clingo_close", 1, pl_clingo_close, 0);
   PL_register_foreign("clingo_add", 3, pl_clingo_add, 0);
   PL_register_foreign("clingo_ground", 2, pl_clingo_ground, 0);
   PL_register_foreign("clingo_solve", 4, pl_clingo_solve, PL_FA_NONDETERMINISTIC);
