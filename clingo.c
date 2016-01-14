@@ -10,6 +10,11 @@ static atom_t ATOM_inf;
 static atom_t ATOM_sup;
 static atom_t ATOM_minus;
 static atom_t ATOM_hash;
+static atom_t ATOM_atoms;
+static atom_t ATOM_terms;
+static atom_t ATOM_shown;
+static atom_t ATOM_csp;
+static atom_t ATOM_comp;
 static functor_t FUNCTOR_hash1;
 static functor_t FUNCTOR_tilde1;
 
@@ -381,11 +386,11 @@ unify_list_from_span(term_t list, clingo_value_span_t *span)
 
 
 static int
-unify_model(term_t t, clingo_model_t *model)
+unify_model(term_t t, int show, clingo_model_t *model)
 { clingo_value_span_t atoms;
   int rc;
 
-  CLINGO_TRY(clingo_model_atoms(model, clingo_show_type_atoms, &atoms));
+  CLINGO_TRY(clingo_model_atoms(model, show, &atoms));
   rc = unify_list_from_span(t, &atoms);
   clingo_free((void*)atoms.begin);
 
@@ -405,8 +410,40 @@ get_assumption(term_t t, clingo_symbolic_literal_t *assump)
 }
 
 
+static int
+get_show_map(term_t t, int *map)
+{ term_t tail = PL_copy_term_ref(t);
+  term_t head = PL_new_term_ref();
+
+  *map = 0;
+  while(PL_get_list(tail,head,tail))
+  { atom_t a;
+
+    if ( PL_get_atom_ex(head, &a) )
+    { if ( a == ATOM_atoms )
+	*map |= clingo_show_type_atoms;
+      else if ( a == ATOM_terms )
+	*map |= clingo_show_type_terms;
+      else if ( a == ATOM_shown )
+	*map |= clingo_show_type_shown;
+      else if ( a == ATOM_csp )
+	*map |= clingo_show_type_csp;
+      else if ( a == ATOM_comp )
+	*map |= clingo_show_type_comp;
+      else
+	return PL_domain_error("clingo_show", head);
+    } else
+      return FALSE;
+  }
+
+  return PL_get_nil_ex(tail);
+}
+
+
 static foreign_t
-pl_clingo_solve(term_t ccontrol, term_t assumptions, term_t Model, control_t h)
+pl_clingo_solve(term_t ccontrol,
+		term_t assumptions, term_t Show,
+		term_t Model, control_t h)
 { clingo_solve_iter_t *it;
 
   switch( PL_foreign_control(h) )
@@ -460,7 +497,12 @@ pl_clingo_solve(term_t ccontrol, term_t assumptions, term_t Model, control_t h)
     next:
       CLINGO_TRY(clingo_solve_iter_next(it, &model));
       if ( model )
-      { if ( !unify_model(Model, model) )
+      { int show;
+
+	if ( !get_show_map(Show, &show) )
+	  return FALSE;
+
+	if ( !unify_model(Model, show, model) )
 	{ if ( PL_exception(0) )
 	    return FALSE;
 	  goto next;
@@ -649,13 +691,18 @@ install_clingo(void)
   ATOM_inf = PL_new_atom("inf");
   ATOM_minus = PL_new_atom("-");
   ATOM_hash = PL_new_atom("#");
+  ATOM_atoms = PL_new_atom("atoms");
+  ATOM_terms = PL_new_atom("terms");
+  ATOM_shown = PL_new_atom("shown");
+  ATOM_csp = PL_new_atom("csp");
+  ATOM_comp = PL_new_atom("comp");
   FUNCTOR_hash1 = PL_new_functor(ATOM_hash, 1);
   FUNCTOR_tilde1 = PL_new_functor(PL_new_atom("~"), 1);
 
   PL_register_foreign("clingo_new", 2, pl_clingo_new, 0);
   PL_register_foreign("clingo_add", 3, pl_clingo_add, 0);
   PL_register_foreign("clingo_ground", 2, pl_clingo_ground, 0);
-  PL_register_foreign("clingo_solve", 3, pl_clingo_solve, PL_FA_NONDETERMINISTIC);
+  PL_register_foreign("clingo_solve", 4, pl_clingo_solve, PL_FA_NONDETERMINISTIC);
   PL_register_foreign("clingo_assign_external", 3, pl_clingo_assign_external, 0);
   PL_register_foreign("clingo_release_external", 2, pl_clingo_release_external, 0);
 }

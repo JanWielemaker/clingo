@@ -8,5 +8,5 @@ assumption(M) :-
 		      [ prog(4)
 		      ]),
 	clingo_solve(C,
-		     [ ~(p(4))
+		     [ ~p(4)
 		     ], M).

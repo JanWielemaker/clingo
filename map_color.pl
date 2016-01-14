@@ -30,7 +30,8 @@ map_color(M) :-
 		    :- color(X,I), color(Y,I), e(X,Y), c(I).
 		    c(C) :- color(C) = @color(1).
 		    v(X) :- country(X) = @country(1).
-		    e(X,Y) :- border(X,Y) = @border(2)."),
+		    e(X,Y) :- border(X,Y) = @border(2).
+		    #show color/2."),
 	clingo_ground(C,
 		      [ base
 		      ]),
