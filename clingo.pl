@@ -4,6 +4,8 @@
 	    clingo_ground/2,		% +Clingo, +Options
 	    clingo_solve/2,		% +Clingo, -Model
 	    clingo_solve/3,		% +Clingo, +Assumptions, -Model
+	    clingo_assign_external/3,	% +Clingo, +Atom, ?Value
+	    clingo_release_external/2,	% +Clingo, +Atom
 
 	    op(100, xfx, {})
 	  ]).

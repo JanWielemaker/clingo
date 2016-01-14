@@ -1,6 +1,6 @@
 :- use_module(clingo).
 
-param(M) :-
+assumption(M) :-
 	clingo_new(C, []),
 	clingo_add(C, prog(x),
 		   "{p(1); p(x)}."),

@@ -280,6 +280,41 @@ out:
 }
 
 
+static foreign_t
+pl_clingo_assign_external(term_t ccontrol, term_t Atom, term_t Value)
+{ clingo_control_t *ctl;
+  clingo_value_t atom;
+  clingo_truth_value_t value;
+  int bv;
+
+  if ( !get_clingo(ccontrol, &ctl) )
+    return FALSE;
+  CLINGO_TRY(get_value(Atom, &atom, FALSE));
+  if ( PL_is_variable(Value) )
+    value = clingo_truth_value_free;
+  else if ( PL_get_bool_ex(Value, &bv) )
+    value = bv ? clingo_truth_value_true : clingo_truth_value_false;
+
+  CLINGO_TRY(clingo_control_assign_external(ctl, atom, value));
+  return TRUE;
+}
+
+
+static foreign_t
+pl_clingo_release_external(term_t ccontrol, term_t Atom)
+{ clingo_control_t *ctl;
+  clingo_value_t atom;
+
+  if ( !get_clingo(ccontrol, &ctl) )
+    return FALSE;
+
+  CLINGO_TRY(get_value(Atom, &atom, FALSE));
+  CLINGO_TRY(clingo_control_release_external(ctl, atom));
+
+  return TRUE;
+}
+
+
 static int
 unify_value(term_t t, clingo_value_t v)
 { switch( clingo_value_type(v) )
@@ -621,4 +656,6 @@ install_clingo(void)
   PL_register_foreign("clingo_add", 3, pl_clingo_add, 0);
   PL_register_foreign("clingo_ground", 2, pl_clingo_ground, 0);
   PL_register_foreign("clingo_solve", 3, pl_clingo_solve, PL_FA_NONDETERMINISTIC);
+  PL_register_foreign("clingo_assign_external", 3, pl_clingo_assign_external, 0);
+  PL_register_foreign("clingo_release_external", 2, pl_clingo_release_external, 0);
 }
