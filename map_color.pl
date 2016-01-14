@@ -22,7 +22,7 @@ border(A,B) :-
 	ngb(A, Borders),
 	member(B, Borders).
 
-test(M) :-
+map_color(M) :-
 	clingo_new(C, []),
 	clingo_add(C, "1 {color(X,I) : c(I)} 1 :- v(X).
 		       :- color(X,I), color(Y,I), e(X,Y), c(I).
