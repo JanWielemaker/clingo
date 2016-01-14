@@ -392,8 +392,6 @@ unify_model(term_t t, int show, clingo_model_t *model)
 
   CLINGO_TRY(clingo_model_atoms(model, show, &atoms));
   rc = unify_list_from_span(t, &atoms);
-  clingo_free((void*)atoms.begin);
-
   return rc;
 }
 
