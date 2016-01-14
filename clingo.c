@@ -14,18 +14,9 @@ static functor_t FUNCTOR_hash1;
 
 static clingo_error_t get_value(term_t t, clingo_value_t *val, int minus);
 
-static bool_t
-exists_function(const char *name)
-{ return TRUE;
-}
-
 static clingo_error_t
-call_function(char const *, clingo_value_span_t, clingo_value_span_t *);
+call_function(char const *, clingo_value_span_t, void *, clingo_value_span_t *);
 
-static clingo_context_t clingo_context =
-{ exists_function,
-  call_function
-};
 
 		 /*******************************
 		 *	  SYMBOL WRAPPER	*
@@ -272,7 +263,7 @@ pl_clingo_ground(term_t ccontrol, term_t parts)
   part_span.begin = part_vec;
   part_span.size = plen;
 
-  rc = clingo_control_ground(ctl, part_span, &clingo_context);
+  rc = clingo_control_ground(ctl, part_span, call_function, NULL);
   if ( rc > 0 )
     Sdprintf("Clingo: %s\n", clingo_error_str(rc));
   rc = !rc;
@@ -378,7 +369,7 @@ pl_clingo_solve(term_t ccontrol, term_t Model, control_t h)
       if ( !get_clingo(ccontrol, &ctl) )
 	return FALSE;
 
-      CLINGO_TRY(clingo_control_solve_iter(ctl, &it));
+      CLINGO_TRY(clingo_control_solve_iter(ctl, NULL, &it));
     next:
       CLINGO_TRY(clingo_solve_iter_next(it, &model));
       if ( model )
@@ -503,6 +494,7 @@ get_value(term_t t, clingo_value_t *val, int minus)
 static clingo_error_t
 call_function(char const *name,
 	      clingo_value_span_t in,
+	      void *closure,
 	      clingo_value_span_t *out)
 { static predicate_t pred = 0;
   fid_t fid = 0;
