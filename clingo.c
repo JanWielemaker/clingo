@@ -11,6 +11,7 @@ static atom_t ATOM_sup;
 static atom_t ATOM_minus;
 static atom_t ATOM_hash;
 static functor_t FUNCTOR_hash1;
+static functor_t FUNCTOR_tilde1;
 
 static clingo_error_t get_value(term_t t, clingo_value_t *val, int minus);
 
@@ -357,19 +358,66 @@ unify_model(term_t t, clingo_model_t *model)
 }
 
 
+static int
+get_assumption(term_t t, clingo_symbolic_literal_t *assump)
+{ if ( PL_is_functor(t, FUNCTOR_tilde1) )
+  { _PL_get_arg(1, t, t);
+    assump->sign = TRUE;
+  } else
+    assump->sign = FALSE;
+
+  return get_value(t, &assump->atom, FALSE);
+}
+
+
 static foreign_t
-pl_clingo_solve(term_t ccontrol, term_t Model, control_t h)
+pl_clingo_solve(term_t ccontrol, term_t assumptions, term_t Model, control_t h)
 { clingo_solve_iter_t *it;
 
   switch( PL_foreign_control(h) )
   { case PL_FIRST_CALL:
     { clingo_control_t *ctl;
       clingo_model_t *model;
+      clingo_symbolic_literal_span_t assump_span;
+      clingo_symbolic_literal_t *assump_vec = NULL;
+      size_t alen = 0;
+      int rc;
 
       if ( !get_clingo(ccontrol, &ctl) )
 	return FALSE;
 
-      CLINGO_TRY(clingo_control_solve_iter(ctl, NULL, &it));
+      switch(PL_skip_list(assumptions, 0, &alen))
+      { case PL_LIST:
+	{ term_t tail = PL_copy_term_ref(assumptions);
+	  term_t head = PL_new_term_ref();
+
+	  if ( !(assump_vec = malloc(sizeof(*assump_vec)*alen)) )
+	    return PL_resource_error("memory");
+	  memset(assump_vec, 0, sizeof(*assump_vec)*alen);
+	  for(size_t i=0; PL_get_list(tail, head, tail); i++)
+	  { if ( !get_assumption(head, &assump_vec[i]) )
+	    { rc = FALSE;
+	      goto out;
+	    }
+	  }
+	  break;
+	}
+        default:
+	  return PL_type_error("list", assumptions);
+      }
+
+      assump_span.size = alen;
+      assump_span.begin = assump_vec;
+      rc = clingo_control_solve_iter(ctl, &assump_span, &it);
+      if ( rc > 0 )
+	Sdprintf("Clingo: %s\n", clingo_error_str(rc));
+      rc = !rc;
+
+    out:
+      if ( assump_vec )
+	free(assump_vec);
+      if ( !rc )
+	return FALSE;
     next:
       CLINGO_TRY(clingo_solve_iter_next(it, &model));
       if ( model )
@@ -563,9 +611,10 @@ install_clingo(void)
   ATOM_minus = PL_new_atom("-");
   ATOM_hash = PL_new_atom("#");
   FUNCTOR_hash1 = PL_new_functor(ATOM_hash, 1);
+  FUNCTOR_tilde1 = PL_new_functor(PL_new_atom("~"), 1);
 
   PL_register_foreign("clingo_new", 2, pl_clingo_new, 0);
   PL_register_foreign("clingo_add", 3, pl_clingo_add, 0);
   PL_register_foreign("clingo_ground", 2, pl_clingo_ground, 0);
-  PL_register_foreign("clingo_solve", 2, pl_clingo_solve, PL_FA_NONDETERMINISTIC);
+  PL_register_foreign("clingo_solve", 3, pl_clingo_solve, PL_FA_NONDETERMINISTIC);
 }
