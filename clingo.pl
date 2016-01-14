@@ -7,5 +7,7 @@
 
 :- use_foreign_library(clingo).
 
-inject_values(Name, _In, Out) :-
-	call(Name, Out).
+inject_values(Name, [Arity], Goal) :-
+	length(Args, Arity),
+	Goal =.. [Name|Args],
+	call(Goal).

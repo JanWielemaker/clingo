@@ -211,29 +211,37 @@ unify_value(term_t t, clingo_value_t v)
   }
 }
 
-
 static int
-unify_model(term_t t, clingo_model_t *model)
-{ clingo_value_span_t atoms;
-  clingo_value_t const *it, *ie;
-  term_t tail = PL_copy_term_ref(t);
+unify_list_from_span(term_t list, clingo_value_span_t *span)
+{ term_t tail = PL_copy_term_ref(list);
   term_t head = PL_new_term_ref();
   term_t tmp = PL_new_term_ref();
+  clingo_value_t const *it, *ie;
 
-  CLINGO_TRY(clingo_model_atoms(model, clingo_show_type_atoms, &atoms));
-  for (it = atoms.begin, ie = it + atoms.size; it != ie; ++it)
+  for (it = span->begin, ie = it + span->size; it != ie; ++it)
   { PL_put_variable(tmp);
 
     if ( !unify_value(tmp, *it) ||
 	 !PL_unify_list(tail, head, tail) ||
 	 !PL_unify(head, tmp) )
-    { clingo_free((void*)atoms.begin);
-      return FALSE;
+    { return FALSE;
     }
   }
 
-  clingo_free((void*)atoms.begin);
   return PL_unify_nil(tail);
+}
+
+
+static int
+unify_model(term_t t, clingo_model_t *model)
+{ clingo_value_span_t atoms;
+  int rc;
+
+  CLINGO_TRY(clingo_model_atoms(model, clingo_show_type_atoms, &atoms));
+  rc = unify_list_from_span(t, &atoms);
+  clingo_free((void*)atoms.begin);
+
+  return rc;
 }
 
 
@@ -368,7 +376,7 @@ call_function(char const *name,
     clingo_value_t *values = NULL;
 
     PL_put_atom_chars(av+0, name);
-    PL_put_nil(av+1);
+    unify_list_from_span(av+1, &in);
     if ( (qid=PL_open_query(NULL, PL_Q_PASS_EXCEPTION, pred, av)) )
     { while(PL_next_solution(qid))
       { if ( count+1 > allocated )
