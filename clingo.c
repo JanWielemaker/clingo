@@ -142,7 +142,8 @@ clingo_status(int rc)
     if ( (ex=PL_new_term_ref()) &&
 	 PL_unify_term(ex, PL_FUNCTOR, FUNCTOR_error2,
 		             PL_FUNCTOR, FUNCTOR_clingo_error1,
-		               PL_CHARS, clingo_error_str(rc)) )
+		               PL_CHARS, clingo_error_str(rc),
+		             PL_VARIABLE) )
       return PL_raise_exception(ex);
   }
 
