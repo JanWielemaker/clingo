@@ -1,6 +1,7 @@
 #define PL_ARITY_AS_SIZE 1
 #include <SWI-Stream.h>
 #include <SWI-Prolog.h>
+#include <pthread.h>
 #include <cclingo.h>
 #include <assert.h>
 #include <string.h>
@@ -17,6 +18,8 @@ static atom_t ATOM_csp;
 static atom_t ATOM_comp;
 static functor_t FUNCTOR_hash1;
 static functor_t FUNCTOR_tilde1;
+static functor_t FUNCTOR_error2;
+static functor_t FUNCTOR_clingo_error1;
 
 static clingo_error_t get_value(term_t t, clingo_value_t *val, int minus);
 
@@ -33,6 +36,7 @@ call_function(char const *, clingo_value_span_t, void *, clingo_value_span_t *);
 typedef struct clingo_env
 { clingo_control_t *	control;	/* Underlying stream */
   clingo_value_t       *values;		/* call_function() values */
+  pthread_mutex_t	mutex;		/* Avoid concurrent solve */
   int			flags;		/* Misc flags  */
 } clingo_env;
 
@@ -42,6 +46,13 @@ typedef struct clingo_wrapper
   int			magic;
 } clingo_wrapper;
 
+
+static pthread_mutex_t clingo_mutex = PTHREAD_MUTEX_INITIALIZER;
+#define LOCK()    pthread_mutex_lock(&clingo_mutex);
+#define UNLOCK()  pthread_mutex_unlock(&clingo_mutex);
+
+#define LOCK_CONTROL(ctl)   pthread_mutex_lock(&ctl->mutex);
+#define UNLOCK_CONTROL(ctl) pthread_mutex_unlock(&ctl->mutex);
 
 static void
 acquire_clingo(atom_t symbol)
@@ -60,6 +71,7 @@ release_clingo(atom_t symbol)
       clingo_control_free(ar->clingo->control);
     if ( ar->clingo->values )
       free(ar->clingo->values);
+    pthread_mutex_destroy(&ar->clingo->mutex);
     PL_free(ar->clingo);
     ar->clingo = NULL;
   }
@@ -107,6 +119,8 @@ get_clingo(term_t t, clingo_env **ccontrol)
   { clingo_wrapper *ar = data;
 
     assert(ar->magic == CLINGO_MAGIC);
+    if ( !ar->clingo->control )
+      return PL_existence_error("clingo", t);
     *ccontrol = ar->clingo;
 
     return TRUE;
@@ -129,6 +143,22 @@ get_clingo(term_t t, clingo_env **ccontrol)
 	  } \
 	}
 
+static int
+clingo_status(int rc)
+{ if ( rc > 0 )
+  { term_t ex;
+
+    if ( (ex=PL_new_term_ref()) &&
+	 PL_unify_term(ex, PL_FUNCTOR, FUNCTOR_error2,
+		             PL_FUNCTOR, FUNCTOR_clingo_error1,
+		               PL_CHARS, clingo_error_str(rc)) )
+      return PL_raise_exception(ex);
+  }
+
+  return !rc;
+}
+
+
 static foreign_t
 pl_clingo_new(term_t ccontrol, term_t options)
 { clingo_control_t *ctl;
@@ -142,6 +172,7 @@ pl_clingo_new(term_t ccontrol, term_t options)
   memset(ar->clingo, 0, sizeof(*ar->clingo));
   ar->magic = CLINGO_MAGIC;
   ar->clingo->control = ctl;
+  pthread_mutex_init(&ar->clingo->mutex, NULL);
 
   return PL_unify_blob(ccontrol, ar, sizeof(*ar), &clingo_blob);
 }
@@ -220,9 +251,11 @@ pl_clingo_add(term_t ccontrol, term_t params, term_t program)
     goto out;
   }
 
+  LOCK();
   rc = clingo_control_add(ctl->control,
 			  PL_atom_chars(name),
 			  (const char**)prog_params, prog);
+  UNLOCK();
   if ( rc > 0 )
     Sdprintf("Clingo: %s\n", clingo_error_str(rc));
   rc = !rc;
@@ -252,7 +285,9 @@ get_params(term_t t, clingo_part_t *pv)
 
       _PL_get_arg(i+1, t, arg);
 
+      LOCK();
       rc = get_value(arg, &values[i], FALSE);
+      UNLOCK();
       if ( rc )
       { free(values);
 	if ( rc > 0 )
@@ -305,7 +340,9 @@ pl_clingo_ground(term_t ccontrol, term_t parts)
   part_span.begin = part_vec;
   part_span.size = plen;
 
+  LOCK();
   rc = clingo_control_ground(ctl->control, part_span, call_function, ctl);
+  UNLOCK();
   if ( ctl->values )
   { free(ctl->values);
     ctl->values = NULL;
@@ -330,18 +367,22 @@ pl_clingo_assign_external(term_t ccontrol, term_t Atom, term_t Value)
 { clingo_env *ctl;
   clingo_value_t atom;
   clingo_truth_value_t value;
-  int bv;
+  int bv, rc;
 
   if ( !get_clingo(ccontrol, &ctl) )
     return FALSE;
-  CLINGO_TRY(get_value(Atom, &atom, FALSE));
+  LOCK();
+  rc = get_value(Atom, &atom, FALSE);
+  UNLOCK();
+  if ( !(rc = clingo_status(rc)) )
+    return FALSE;
   if ( PL_is_variable(Value) )
     value = clingo_truth_value_free;
   else if ( PL_get_bool_ex(Value, &bv) )
     value = bv ? clingo_truth_value_true : clingo_truth_value_false;
 
-  CLINGO_TRY(clingo_control_assign_external(ctl->control, atom, value));
-  return TRUE;
+  return clingo_status(
+	     clingo_control_assign_external(ctl->control, atom, value));
 }
 
 
@@ -349,14 +390,18 @@ static foreign_t
 pl_clingo_release_external(term_t ccontrol, term_t Atom)
 { clingo_env *ctl;
   clingo_value_t atom;
+  int rc;
 
   if ( !get_clingo(ccontrol, &ctl) )
     return FALSE;
 
-  CLINGO_TRY(get_value(Atom, &atom, FALSE));
-  CLINGO_TRY(clingo_control_release_external(ctl->control, atom));
+  LOCK();
+  rc = get_value(Atom, &atom, FALSE);
+  UNLOCK();
+  if ( !(rc=clingo_status(rc)) )
+    return FALSE;
 
-  return TRUE;
+  return clingo_status(clingo_control_release_external(ctl->control, atom));
 }
 
 
@@ -428,24 +473,29 @@ unify_list_from_span(term_t list, clingo_value_span_t *span)
 static int
 unify_model(term_t t, int show, clingo_model_t *model)
 { clingo_value_span_t atoms;
-  int rc;
 
-  CLINGO_TRY(clingo_model_atoms(model, show, &atoms));
-  rc = unify_list_from_span(t, &atoms);
+  if ( !clingo_status(clingo_model_atoms(model, show, &atoms)) )
+    return FALSE;
 
-  return rc;
+  return unify_list_from_span(t, &atoms);
 }
 
 
 static int
 get_assumption(term_t t, clingo_symbolic_literal_t *assump)
-{ if ( PL_is_functor(t, FUNCTOR_tilde1) )
+{ int rc;
+
+  if ( PL_is_functor(t, FUNCTOR_tilde1) )
   { _PL_get_arg(1, t, t);
     assump->sign = TRUE;
   } else
     assump->sign = FALSE;
 
-  return get_value(t, &assump->atom, FALSE);
+  LOCK();
+  rc = get_value(t, &assump->atom, FALSE);
+  UNLOCK();
+
+  return rc;
 }
 
 
@@ -478,6 +528,11 @@ get_show_map(term_t t, int *map)
   return PL_get_nil_ex(tail);
 }
 
+
+typedef struct solve_state
+{ clingo_env *ctl;
+  clingo_solve_iter_t *it;
+} solve_state;
 
 static foreign_t
 pl_clingo_solve(term_t ccontrol,
@@ -658,6 +713,7 @@ get_value(term_t t, clingo_value_t *val, int minus)
   }
 }
 
+/* MT: grounding is already locked */
 
 static clingo_error_t
 call_function(char const *name,
@@ -745,6 +801,8 @@ install_clingo(void)
   ATOM_comp = PL_new_atom("comp");
   FUNCTOR_hash1 = PL_new_functor(ATOM_hash, 1);
   FUNCTOR_tilde1 = PL_new_functor(PL_new_atom("~"), 1);
+  FUNCTOR_clingo_error1 = PL_new_functor(PL_new_atom("clingo_error"), 1);
+  FUNCTOR_error2 = PL_new_functor(PL_new_atom("error"), 2);
 
   PL_register_foreign("clingo_new", 2, pl_clingo_new, 0);
   PL_register_foreign("clingo_close", 1, pl_clingo_close, 0);
