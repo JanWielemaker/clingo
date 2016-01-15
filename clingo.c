@@ -134,15 +134,6 @@ get_clingo(term_t t, clingo_env **ccontrol)
 		 *	    PREDICATES		*
 		 *******************************/
 
-#define CLINGO_TRY(g) \
-	{ int _rc = (g); \
-	  if ( _rc != 0 ) \
-	  { if ( _rc > 0 ) \
-	      Sdprintf("Clingo: %s\n", clingo_error_str(_rc)); \
-	    return FALSE; \
-	  } \
-	}
-
 static int
 clingo_status(int rc)
 { if ( rc > 0 )
@@ -256,9 +247,7 @@ pl_clingo_add(term_t ccontrol, term_t params, term_t program)
 			  PL_atom_chars(name),
 			  (const char**)prog_params, prog);
   UNLOCK();
-  if ( rc > 0 )
-    Sdprintf("Clingo: %s\n", clingo_error_str(rc));
-  rc = !rc;
+  rc = clingo_status(rc);
 
 out:
   if ( prog_params != param_buf )
@@ -290,9 +279,7 @@ get_params(term_t t, clingo_part_t *pv)
       UNLOCK();
       if ( rc )
       { free(values);
-	if ( rc > 0 )
-	  Sdprintf("Clingo: %s\n", clingo_error_str(rc));
-	return FALSE;
+	return clingo_status(rc);
       }
     }
 
@@ -347,9 +334,7 @@ pl_clingo_ground(term_t ccontrol, term_t parts)
   { free(ctl->values);
     ctl->values = NULL;
   }
-  if ( rc > 0 )
-    Sdprintf("Clingo: %s\n", clingo_error_str(rc));
-  rc = !rc;
+  rc = clingo_status(rc);
 
 out:
   if ( part_vec )
