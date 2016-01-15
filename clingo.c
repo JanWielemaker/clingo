@@ -532,24 +532,26 @@ get_show_map(term_t t, int *map)
 typedef struct solve_state
 { clingo_env *ctl;
   clingo_solve_iter_t *it;
+  int locked;
 } solve_state;
 
 static foreign_t
 pl_clingo_solve(term_t ccontrol,
 		term_t assumptions, term_t Show,
 		term_t Model, control_t h)
-{ clingo_solve_iter_t *it;
+{ solve_state state_buf;
+  solve_state *state = &state_buf;
 
   switch( PL_foreign_control(h) )
   { case PL_FIRST_CALL:
-    { clingo_env *ctl;
-      clingo_model_t *model;
+    { clingo_model_t *model;
       clingo_symbolic_literal_span_t assump_span;
       clingo_symbolic_literal_t *assump_vec = NULL;
       size_t alen = 0;
       int rc;
 
-      if ( !get_clingo(ccontrol, &ctl) )
+      memset(state, 0, sizeof(*state));
+      if ( !get_clingo(ccontrol, &state->ctl) )
 	return FALSE;
 
       switch(PL_skip_list(assumptions, 0, &alen))
@@ -564,57 +566,73 @@ pl_clingo_solve(term_t ccontrol,
 	  { int crc;
 
 	    if ( (crc=get_assumption(head, &assump_vec[i])) )
-	    { if ( crc > 0 )
-		Sdprintf("Clingo: %s\n", clingo_error_str(crc));
-	      rc = FALSE;
+	    { rc = clingo_status(crc);
 	      goto out;
 	    }
 	  }
 	  break;
 	}
         default:
-	  return PL_type_error("list", assumptions);
+	  rc = PL_type_error("list", assumptions);
+	  goto out;
       }
 
       assump_span.size = alen;
       assump_span.begin = assump_vec;
-      rc = clingo_control_solve_iter(ctl->control, &assump_span, &it);
-      if ( rc > 0 )
-	Sdprintf("Clingo: %s\n", clingo_error_str(rc));
-      rc = !rc;
+      LOCK_CONTROL(state->ctl);
+      state->locked = TRUE;
+      rc = clingo_control_solve_iter(state->ctl->control,
+				     &assump_span, &state->it);
+      rc = clingo_status(rc);
 
     out:
       if ( assump_vec )
 	free(assump_vec);
       if ( !rc )
+      { out_false:
+	if ( state->locked )
+	  UNLOCK_CONTROL(state->ctl);
+	if ( state != &state_buf )
+	  free(state);
 	return FALSE;
+      }
     next:
-      CLINGO_TRY(clingo_solve_iter_next(it, &model));
-      if ( model )
+      rc = clingo_status(clingo_solve_iter_next(state->it, &model));
+      if ( rc && model )
       { int show;
 
 	if ( !get_show_map(Show, &show) )
-	  return FALSE;
+	  goto out_false;
 
 	if ( !unify_model(Model, show, model) )
 	{ if ( PL_exception(0) )
-	    return FALSE;
+	    goto out_false;
 	  goto next;
 	}
-	PL_retry_address(it);
+	if ( state == &state_buf )
+	{ if ( !(state = malloc(sizeof(*state))) )
+	  { state = &state_buf;
+	    PL_resource_error("memory");
+	    goto out_false;
+	  }
+	  *state = state_buf;
+	}
+	PL_retry_address(state);
       } else
-      { clingo_solve_iter_close(it);
-	return FALSE;
+      { clingo_solve_iter_close(state->it);
+	goto out_false;
       }
     }
     case PL_REDO:
-    { it = PL_foreign_context_address(h);
+    { state = PL_foreign_context_address(h);
       goto next;
     }
     case PL_PRUNED:
     default:
-    { it = PL_foreign_context_address(h);
-      clingo_solve_iter_close(it);
+    { state = PL_foreign_context_address(h);
+      clingo_solve_iter_close(state->it);
+      UNLOCK_CONTROL(state->ctl);
+      free(state);
       return TRUE;
     }
   }
