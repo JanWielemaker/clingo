@@ -339,7 +339,7 @@ pl_clingo_ground(term_t ccontrol, term_t parts)
 
 out:
   if ( part_vec )
-  { for(size_t i; i<plen; i++)
+  { for(size_t i=0; i<plen; i++)
       free((void*)part_vec[i].params.begin);
     free(part_vec);
   }
@@ -366,6 +366,8 @@ pl_clingo_assign_external(term_t ccontrol, term_t Atom, term_t Value)
     value = clingo_truth_value_free;
   else if ( PL_get_bool_ex(Value, &bv) )
     value = bv ? clingo_truth_value_true : clingo_truth_value_false;
+  else
+    return FALSE;
 
   LOCK();
   rc = clingo_control_assign_external(ctl->control, atom, value);
@@ -785,7 +787,8 @@ call_function(char const *name,
     ctl->values = values;
 
     return 0;
-  }
+  } else
+    rc = FALSE;
 
 error:
   if ( qid )
