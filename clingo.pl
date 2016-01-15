@@ -18,7 +18,9 @@
 	    op(100, xfx, {}),
 	    op(100, fx, #),
 	    op(100, fx, ~),
-	    op(1100, xfx, const)
+	    op(1100, xfx, const),
+	    op(1100, xfx, show),
+	    op(1100, xfx, external)
 	  ]).
 :- use_foreign_library(clingo).
 :- use_module(library(dcg/basics)).
@@ -133,8 +135,11 @@ clingo_statement(Head :- Body) --> !,
 clingo_statement(:- Body) --> !,
 	":- ", clingo_body(Body), ".\n".
 clingo_statement(#const Name = Value) --> !,
-	{ debug(clingo(compile), 'Const ~p', [Name]) },
 	"#const ", clingo_id(Name), " = ", term(Value), ".\n".
+clingo_statement(#external Ext) --> !,
+	"#external ", external(Ext), ".\n".
+clingo_statement(#show Show) --> !,
+	"#show ", show(Show), ".\n".
 clingo_statement(Head) -->
 	clingo_head(Head), ".\n".
 
@@ -176,6 +181,18 @@ src_module -->
 src_module -->
 	"".
 
+external((A,B)) --> !,
+	external(A), ", ",
+	external(B).
+external(A) -->
+	term(A).
+
+show((A,B)) --> !,
+	show(A), ", ",
+	show(B).
+show(A) -->
+	term(A).
+
 clingo_id(Name) -->
 	{ valid_clingo_id(Name) },
 	atom(Name).
@@ -211,6 +228,9 @@ term('$VAR'(Var)) -->
 term(#Keyword) --> !,
 	{ clingo_keyword(Keyword) },
 	"#", atom(Keyword).
+term(Name/Arity) --> !,
+	{ must_be(nonneg, Arity) },
+	clingo_id(Name), "/", integer(Arity).
 term(Term) -->
 	{ compound(Term), !,
 	  compound_name_arguments(Term, Name, Arguments)
