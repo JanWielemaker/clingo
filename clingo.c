@@ -366,8 +366,11 @@ pl_clingo_assign_external(term_t ccontrol, term_t Atom, term_t Value)
   else if ( PL_get_bool_ex(Value, &bv) )
     value = bv ? clingo_truth_value_true : clingo_truth_value_false;
 
-  return clingo_status(
-	     clingo_control_assign_external(ctl->control, atom, value));
+  LOCK();
+  rc = clingo_control_assign_external(ctl->control, atom, value);
+  UNLOCK();
+
+  return clingo_status(rc);
 }
 
 
@@ -386,7 +389,11 @@ pl_clingo_release_external(term_t ccontrol, term_t Atom)
   if ( !(rc=clingo_status(rc)) )
     return FALSE;
 
-  return clingo_status(clingo_control_release_external(ctl->control, atom));
+  LOCK();
+  rc = clingo_control_release_external(ctl->control, atom);
+  UNLOCK();
+
+  return clingo_status(rc);
 }
 
 
