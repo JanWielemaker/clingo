@@ -17,13 +17,15 @@
 
 	    op(100, xfx, {}),
 	    op(100, fx, #),
-	    op(100, fx, ~)
+	    op(100, fx, ~),
+	    op(1100, xfx, const)
 	  ]).
 :- use_foreign_library(clingo).
 :- use_module(library(dcg/basics)).
 :- use_module(library(apply)).
 :- use_module(library(yall)).
 :- use_module(library(error)).
+:- use_module(library(debug)).
 :- use_module(library(apply_macros)).
 
 :- meta_predicate
@@ -111,18 +113,28 @@ end_clingo :-
 :- thread_local
 	clingo_term/1.
 
-compile_clingo([begin(Params)|Terms], clingo_program(Params, Program)) :-
+compile_clingo([begin(Params)|Terms],
+	       [ (:-multifile(clingo_program/2)),
+		 clingo_program(Params, Program)
+	       ]) :-
 	phrase(clingo_program(Terms), ProgramCodes),
 	string_codes(Program, ProgramCodes).
 
 clingo_program([]) --> [].
-clingo_program([H|T]) --> clingo_statement(H), clingo_program(T).
+clingo_program([H|T]) -->
+	{ debug(clingo(compile), 'Translate ~q', [H])
+	},
+	clingo_statement(H),
+	clingo_program(T).
 
 clingo_statement(Head :- Body) --> !,
 	clingo_head(Head), " :- ",
 	clingo_body(Body), ".\n".
 clingo_statement(:- Body) --> !,
 	":- ", clingo_body(Body), ".\n".
+clingo_statement(#const Name = Value) --> !,
+	{ debug(clingo(compile), 'Const ~p', [Name]) },
+	"#const ", clingo_id(Name), " = ", term(Value), ".\n".
 clingo_statement(Head) -->
 	clingo_head(Head), ".\n".
 
@@ -168,6 +180,43 @@ clingo_id(Name) -->
 	{ valid_clingo_id(Name) },
 	atom(Name).
 
+arguments([]) --> [].
+arguments([H|T]) -->
+	term(H),
+	(   {T==[]}
+	->  ""
+	;   ", ",
+	    arguments(T)
+	).
+
+term(Var) -->
+	{ var(Var), !,
+	  instantiation_error(Var)
+	}.
+term(Num) -->
+	{ integer(Num),
+	  must_be(between(-2147483648, 2147483647), Num)
+	}, !,
+	integer(Num).
+term(String) -->
+	{ string(String), !,
+	  string_codes(String, Codes)
+	},
+	clingo_string(Codes).
+term(Atom) -->
+	{ atom(Atom) },
+	clingo_id(Atom).
+term('$VAR'(Var)) -->
+	clingo_var(Var).
+term(#Keyword) --> !,
+	{ clingo_keyword(Keyword) },
+	"#", atom(Keyword).
+term(Term) -->
+	{ compound(Term), !,
+	  compound_name_arguments(Term, Name, Arguments)
+	},
+	clingo_id(Name), "(", arguments(Arguments), ")".
+
 %%	valid_clingo_id(+Atom) is det.
 %
 %	@error domain_error(clingo_id, Atom).
@@ -187,34 +236,6 @@ is_valid_clingo_id(Atom)  :-
 	),
 	maplist([C]>>code_type(C, csym), T), !.
 
-arguments([]) --> [].
-arguments([H|T]) -->
-	term(H),
-	(   {T==[]}
-	->  ""
-	;   ", ",
-	    arguments(T)
-	).
-
-term(Num) -->
-	{ integer(Num) }, !,
-	integer(Num).
-term(String) -->
-	{ string(String), !,
-	  string_codes(String, Codes)
-	},
-	clingo_string(Codes).
-term(Atom) -->
-	{ atom(Atom) },
-	clingo_id(Atom).
-term('$VAR'(Var)) -->
-	clingo_var(Var).
-term(Term) -->
-	{ compound(Term), !,
-	  compound_name_arguments(Term, Name, Arguments)
-	},
-	clingo_id(Name), "(", arguments(Arguments), ")".
-
 clingo_var(Name, List, Tail) :-
 	format(codes(List,Tail), '~p', ['$VAR'(Name)]).
 
@@ -227,6 +248,18 @@ clingo_string_codes([H|T]) -->
 clingo_string_code(0'\") --> !, "\\\"".
 clingo_string_code(0'\n) --> !, "\\n".
 clingo_string_code(C) --> [C].
+
+clingo_keyword(Kwd) :-
+	is_clingo_keyword(Kwd), !.
+clingo_keyword(Kwd) :-
+	domain_error(clingo_keyword, Kwd).
+
+is_clingo_keyword(0) :- !, fail.
+is_clingo_keyword(inf).
+is_clingo_keyword(sup).
+is_clingo_keyword(external).
+is_clingo_keyword(show).
+is_clingo_keyword(const).
 
 
 		 /*******************************
