@@ -3,8 +3,8 @@
 ################################################################
 
 # Edit
-CLINGOHOME=/home/jan/src/gringo-claspoutput
-BUILD=debug
+CLINGOHOME=/home/jan/3rdparty/gringo-claspoutput
+BUILD=release
 
 # Edit and uncomment if `swipl` is not in $PATH
 SWIPLLD=swipl-ld
