@@ -1,3 +1,5 @@
+% Work in progress, playing with a term-based interface to Clingo.
+
 :- use_module(library(clingo)).
 
 color(red).
