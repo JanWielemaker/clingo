@@ -61,3 +61,10 @@ changing world:
       Prolog atoms, strings or variables, but invalid in Clingo's
       syntax.
   - More high level interaction.
+
+
+### Further reading:
+
+  - The Clingo user guide can be found here
+    - http://sourceforge.net/projects/potassco/files/guide/2.0/
+
