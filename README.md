@@ -28,7 +28,7 @@ tested by running e.g.:
 ```{shell}
 ./swipl.sh map_color.pl
 ?- map_color(Colors).
-```{shell}
+```
 
 Finally, the system is installed as a SWI-Prolog library using `make
 install`.
