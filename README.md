@@ -26,7 +26,7 @@ your installation. See instructions in the file. After that running
 tested by running e.g.:
 
 ```{shell}
-./swipl.sh map_color.pl
+./swipl.sh examples/map_color.pl
 ?- map_color(Colors).
 ```
 

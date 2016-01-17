@@ -1,4 +1,4 @@
-:- use_module(clingo).
+:- use_module(library(clingo)).
 
 color(red).
 color(blue).
@@ -23,16 +23,34 @@ border(A,B) :-
 	ngb(A, Borders),
 	member(B, Borders).
 
+:- begin_clingo(color).
+
+1 {color(X,I) : @color(I)} 1 :- @country(X).
+:- color(X,I), color(Y,I), @border(X,Y).
+
+:- end_clingo.
+
 map_color(M) :-
-	clingo_new(C, []),
-	clingo_add(C, base,
-		   "1 {color(X,I) : c(I)} 1 :- v(X).
-		    :- color(X,I), color(Y,I), e(X,Y), c(I).
-		    c(C) :- color(C) = @color(1).
-		    v(X) :- country(X) = @country(1).
-		    e(X,Y) :- border(X,Y) = @border(2).
-		    #show color/2."),
-	clingo_ground(C,
-		      [ base
-		      ]),
-	clingo_solve(C, M).
+	clingo_model(color, M).
+
+:- begin_clingo(const).
+
+#const x = 100.
+p(x).
+
+:- end_clingo.
+
+const(M) :-
+	clingo_model(const, M).
+
+:- begin_clingo(show).
+
+p(x).
+q(y).
+
+#show q/1.
+
+:- end_clingo.
+
+show(M) :-
+	clingo_model(show, M).

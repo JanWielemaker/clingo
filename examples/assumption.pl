@@ -1,4 +1,4 @@
-:- use_module(clingo).
+:- use_module(library(clingo)).
 
 assumption(M) :-
 	clingo_new(C, []),

@@ -1,4 +1,4 @@
-:- use_module(clingo).
+:- use_module(library(clingo)).
 
 param(M) :-
 	clingo_new(C, []),
