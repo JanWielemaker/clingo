@@ -28,9 +28,9 @@ map_color(M) :-
 	clingo_add(C, base,
 		   "1 {color(X,I) : c(I)} 1 :- v(X).
 		    :- color(X,I), color(Y,I), e(X,Y), c(I).
-		    c(C) :- color(C) = @color(1).
-		    v(X) :- country(X) = @country(1).
-		    e(X,Y) :- border(X,Y) = @border(2).
+		    c(C) :- color(C) = @color(1, user).
+		    v(X) :- country(X) = @country(1, user).
+		    e(X,Y) :- border(X,Y) = @border(2, user).
 		    #show color/2."),
 	clingo_ground(C,
 		      [ base
