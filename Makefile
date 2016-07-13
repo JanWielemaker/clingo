@@ -2,30 +2,36 @@
 # Build the Clingo interface for SWI-Prolog
 ################################################################
 
-# Edit
-CLINGOHOME=/home/janw/3rdparty/gringo-claspoutput
-BUILD=release
+-include FLAGS
 
-# Edit and uncomment if `swipl` is not in $PATH
-SWIPLLD=swipl-ld
-SWIPL=swipl
-# PLFLAGS=-pl $(SWIPL)
+CLINGOHOME?=${HOME}/clingo
+BUILD?=debug
 
-COFLAGS=-O2
-# Uncomment for debugging
-# COFLAGS= -gdwarf-2 -g3
+SWIPLLD?=swipl-ld
+SWIPL?=swipl
+
+COFLAGS?=-gdwarf-2 -g3 -O0
 
 CLINGOLIBDIR=$(CLINGOHOME)/build/$(BUILD)
-CFLAGS=-I$(CLINGOHOME)/libcclingo -Wall $(COFLAGS)
-LIBS=-L$(CLINGOLIBDIR) -lcclingo
+CFLAGS=-I$(CLINGOHOME)/libgringo -W -Wall $(COFLAGS)
+LIBS=-L$(CLINGOLIBDIR) -lclingo
 LDFLAGS=-cc-options,-std=c99 -Wl,-rpath=$(CLINGOLIBDIR) -shared
 SO=so
 
+all: clingo.$(SO)
+
+FLAGS:
+	rm -f FLAGS
+	echo "CLINGOHOME:=$(CLINGOHOME)" >> FLAGS
+	echo "BUILD:=$(BUILD)" >> FLAGS
+	echo "SWIPLLD:=$(SWIPLLD)" >> FLAGS
+	echo "SWIPL=$(SWIPL)" >> FLAGS
+	echo "PLFLAGS=-pl \$$(SWIPL)" >> FLAGS
+	echo "COFLAGS=$(COFLAGS)" >> FLAGS
+
 SRC=clingo.c
 
-all:	clingo.$(SO)
-
-clingo.$(SO): $(SRC) Makefile
+clingo.$(SO): $(SRC) FLAGS
 	$(SWIPLLD) $(PLFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $(SRC) $(LIBS)
 
 install: clingo.$(SO)
