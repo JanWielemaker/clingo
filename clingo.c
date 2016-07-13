@@ -1,4 +1,3 @@
-#define PL_ARITY_AS_SIZE 1
 #include <SWI-Stream.h>
 #include <SWI-Prolog.h>
 #include <assert.h>
@@ -26,6 +25,18 @@ static clingo_error_t get_value(term_t t, clingo_symbol_t *val, int minus);
 static clingo_error_t call_function(clingo_location_t, char const *,
                                     clingo_symbol_t const *, size_t, void *,
                                     clingo_symbol_callback_t *, void *);
+
+
+#ifndef PL_ARITY_AS_SIZE
+int get_name_arity(term_t t, atom_t *name, size_t *arity) {
+    int ret, rc;
+    rc = PL_get_name_arity(t, name, &ret);
+    *arity = ret;
+    return rc;
+}
+#else
+#   define get_name_arity PL_get_name_arity
+#endif
 
 ////////////////////////////// SYMBOL WRAPPER //////////////////////////////
 
@@ -126,13 +137,13 @@ static int clingo_status(int rc) {
 static foreign_t pl_clingo_new(term_t ccontrol, term_t options) {
     (void)options;
     clingo_control_t *ctl;
-    char const *argv[] = {"Clingo", "0"};
+    char const *argv[] = {"-n", "0"};
     clingo_wrapper *ar;
 
+    // TODO: no error checking here?
     // TODO: might take a logger for handling info messages
     clingo_control_new(argv, 2, NULL, NULL, 20, &ctl);
-    clingo_control_add(ctl, "base", NULL, 0, "a.");
-    printf("new: %p\n", ctl);
+
     ar = PL_malloc(sizeof(*ar));
     memset(ar, 0, sizeof(*ar));
     ar->clingo = PL_malloc(sizeof(*ar->clingo));
@@ -190,7 +201,7 @@ static foreign_t pl_clingo_add(term_t ccontrol, term_t params, term_t program) {
         return FALSE;
     }
 
-    if (!PL_get_name_arity(params, &name, &arity)) {
+    if (!get_name_arity(params, &name, &arity)) {
         return PL_type_error("callable", params);
     }
 
@@ -213,9 +224,6 @@ static foreign_t pl_clingo_add(term_t ccontrol, term_t params, term_t program) {
         goto out;
     }
 
-    printf("adding %s/%d\n", PL_atom_chars(name), (int)arity);
-    printf("%s\n", prog);
-    printf("%p\n", ctl->control);
     rc = clingo_control_add(ctl->control, PL_atom_chars(name),
                             (const char **)prog_params, arity, prog);
     rc = clingo_status(rc);
@@ -231,7 +239,7 @@ out:
 static int get_params(term_t t, clingo_part_t *pv) {
     atom_t name;
 
-    if (PL_get_name_arity(t, &name, &pv->size)) {
+    if (get_name_arity(t, &name, &pv->size)) {
         term_t arg = PL_new_term_ref();
         clingo_symbol_t *values;
 
@@ -251,6 +259,7 @@ static int get_params(term_t t, clingo_part_t *pv) {
             }
         }
 
+        pv->params = values;
         pv->name = PL_atom_chars(name);
 
         return TRUE;
@@ -374,7 +383,7 @@ static int unify_value(term_t t, clingo_symbol_t v) {
         char const *str;
         clingo_symbol_t const *args;
         size_t size;
-        clingo_symbol_string(v, &str);
+        clingo_symbol_name(v, &str);
         clingo_symbol_arguments(v, &args, &size);
         if (size == 0) {
             return PL_unify_chars(t, PL_ATOM | REP_UTF8, (size_t)-1, str);
@@ -635,7 +644,7 @@ static clingo_error_t get_value(term_t t, clingo_symbol_t *val, int minus) {
         atom_t name;
         size_t arity; /* TBD: -atom, #const */
 
-        if (PL_get_name_arity(t, &name, &arity)) {
+        if (get_name_arity(t, &name, &arity)) {
             term_t arg = PL_new_term_ref();
 
             if (name == ATOM_minus && arity == 1) {

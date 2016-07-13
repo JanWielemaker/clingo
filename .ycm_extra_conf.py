@@ -48,6 +48,7 @@ flags = [
 '-std=c99',
 '-I{home}/clingo-5/libgringo'.format(home=os.path.expanduser("~")),
 '-I{home}/local/opt/swi-prolog/lib/swipl/include'.format(home=os.path.expanduser("~")),
+'-I/usr/lib64/swipl-7.2.3/include'
 ]
 
 
