@@ -617,7 +617,7 @@ static clingo_error_t get_value(term_t t, clingo_symbol_t *val, int minus) {
         int i;
 
         if (PL_get_integer(t, &i)) {
-            clingo_symbol_create_num(i, val);
+            clingo_symbol_create_number(i, val);
             return 0;
         }
         return clingo_error_unknown;

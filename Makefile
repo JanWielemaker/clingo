@@ -15,7 +15,7 @@ COFLAGS?=-gdwarf-2 -g3 -O0
 CLINGOLIBDIR=$(CLINGOHOME)/build/$(BUILD)
 CFLAGS=-I$(CLINGOHOME)/libgringo -W -Wall $(COFLAGS)
 LIBS=-L$(CLINGOLIBDIR) -lclingo
-LDFLAGS=-cc-options,-std=c99 -Wl,-rpath=$(CLINGOLIBDIR) -shared
+LDFLAGS=-cc-options,-std=c99 -Wl,-rpath=/home/wv/bin/linux/64/swipl/lib/swipl-7.3.15/lib/x86_64-linux -shared
 SO=so
 
 all: clingo.$(SO)
@@ -30,6 +30,11 @@ FLAGS:
 	echo "COFLAGS=$(COFLAGS)" >> FLAGS
 
 SRC=clingo.c
+
+.PHONY: clean
+
+clean:
+	rm -f clingo.$(SO)
 
 clingo.$(SO): $(SRC) FLAGS
 	$(SWIPLLD) $(PLFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $(SRC) $(LIBS)
