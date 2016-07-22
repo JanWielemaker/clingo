@@ -437,7 +437,7 @@ static int unify_model(term_t t, int show, clingo_model_t *model) {
     size_t alen;
     int rc;
 
-    if (!clingo_status(clingo_model_atoms_size(model, show, &alen))) {
+    if (!clingo_status(clingo_model_symbols_size(model, show, &alen))) {
         return FALSE;
     }
 
@@ -446,7 +446,7 @@ static int unify_model(term_t t, int show, clingo_model_t *model) {
         return PL_resource_error("memory");
     }
 
-    if (!(rc = clingo_status(clingo_model_atoms(model, show, atoms, alen)))) {
+    if (!(rc = clingo_status(clingo_model_symbols(model, show, atoms, alen)))) {
         goto out;
     }
 
