@@ -31,10 +31,19 @@
 import os
 import os.path
 import ycm_core
+import glob
 
 # These are the compilation flags that will be used in case there's no
 # compilation database set (by default, one is not set).
 # CHANGE THIS LIST OF FLAGS. YES, THIS IS THE DROID YOU HAVE BEEN LOOKING FOR.
+def swipl_include():
+    inc = os.path.expanduser("~/local/opt/swi-prolog/lib/swipl/include")
+    if os.path.isdir(inc): return ['-I{0}'.format(inc)]
+    inc = glob.glob("/usr/lib64/swipl-*/include")
+    if len(inc) > 0: return ['-I{0}'.format(inc[0])]
+    return []
+
+home = os.path.expanduser("~")
 flags = [
 '-Wall',
 '-Wextra',
@@ -47,10 +56,7 @@ flags = [
 '-xc++',
 '-std=c99',
 '-I{home}/clingo-5/libgringo'.format(home=os.path.expanduser("~")),
-'-I{home}/local/opt/swi-prolog/lib/swipl/include'.format(home=os.path.expanduser("~")),
-'-I/usr/lib64/swipl-7.2.3/include'
-]
-
+] + swipl_include()
 
 # Set this to the absolute path to the folder (NOT the file!) containing the
 # compile_commands.json file to use that instead of 'flags'. See here for
