@@ -3,8 +3,10 @@
 #include <assert.h>
 #include <clingo.h>
 #include <pthread.h>
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
+
+#define FAST_PARAMS 10
 
 static atom_t ATOM_inf;
 static atom_t ATOM_sup;
@@ -26,7 +28,6 @@ static bool call_function(clingo_location_t, char const *,
                           clingo_symbol_t const *, size_t, void *,
                           clingo_symbol_callback_t *, void *);
 
-
 #ifndef PL_ARITY_AS_SIZE
 int get_name_arity(term_t t, atom_t *name, size_t *arity) {
     int ret, rc;
@@ -35,7 +36,7 @@ int get_name_arity(term_t t, atom_t *name, size_t *arity) {
     return rc;
 }
 #else
-#   define get_name_arity PL_get_name_arity
+#define get_name_arity PL_get_name_arity
 #endif
 
 ////////////////////////////// SYMBOL WRAPPER //////////////////////////////
@@ -185,8 +186,6 @@ static int get_null_terminated_string(term_t t, char **s, int flags) {
     return FALSE;
 }
 
-#define FAST_PARAMS 10
-
 static foreign_t pl_clingo_add(term_t ccontrol, term_t params, term_t program) {
     char *prog;
     clingo_env *ctl;
@@ -197,36 +196,38 @@ static foreign_t pl_clingo_add(term_t ccontrol, term_t params, term_t program) {
     term_t arg = PL_new_term_ref();
     int rc;
 
-    if (!get_clingo(ccontrol, &ctl)) {
-        return FALSE;
+    if (!(rc = get_clingo(ccontrol, &ctl))) {
+        goto out;
     }
 
     if (!get_name_arity(params, &name, &arity)) {
-        return PL_type_error("callable", params);
+        rc = PL_type_error("callable", params);
+        goto out;
     }
 
     if (arity + 1 > FAST_PARAMS &&
         !(prog_params = malloc(sizeof(char *) * arity))) {
-        return PL_resource_error("memory");
+        rc = PL_resource_error("memory");
+        goto out;
     }
 
     for (size_t i = 0; i < arity; i++) {
         _PL_get_arg(i + 1, params, arg);
-        if (!get_null_terminated_string(arg, &prog_params[i], CVT_ATOM)) {
-            rc = FALSE;
+        if (!(rc =
+                  get_null_terminated_string(arg, &prog_params[i], CVT_ATOM))) {
             goto out;
         }
     }
-    if (!get_null_terminated_string(program, &prog, CVT_ATOM | CVT_STRING |
-                                                        CVT_LIST |
-                                                        BUF_DISCARDABLE)) {
-        rc = FALSE;
+    if (!(rc = get_null_terminated_string(program, &prog,
+                                          CVT_ATOM | CVT_STRING | CVT_LIST |
+                                              BUF_DISCARDABLE))) {
         goto out;
     }
-
-    rc = clingo_control_add(ctl->control, PL_atom_chars(name),
-                            (const char **)prog_params, arity, prog);
-    rc = clingo_status(rc);
+    if (!(rc = clingo_status(
+              clingo_control_add(ctl->control, PL_atom_chars(name),
+                                 (const char **)prog_params, arity, prog)))) {
+        goto out;
+    }
 
 out:
     if (prog_params != param_buf) {
@@ -237,35 +238,39 @@ out:
 }
 
 static int get_params(term_t t, clingo_part_t *pv) {
+    int rc;
     atom_t name;
+    term_t arg;
+    clingo_symbol_t *values = NULL;
 
-    if (get_name_arity(t, &name, &pv->size)) {
-        term_t arg = PL_new_term_ref();
-        clingo_symbol_t *values;
-
-        if (!(values = malloc(sizeof(*pv->params) * pv->size))) {
-            return PL_resource_error("memory");
-        }
-
-        for (size_t i = 0; i < pv->size; i++) {
-            int rc;
-
-            _PL_get_arg(i + 1, t, arg);
-
-            rc = get_value(arg, &values[i], FALSE);
-            if (!rc) {
-                free(values);
-                return clingo_status(rc);
-            }
-        }
-
-        pv->params = values;
-        pv->name = PL_atom_chars(name);
-
-        return TRUE;
+    if (!(rc = get_name_arity(t, &name, &pv->size))) {
+        rc = PL_type_error("callable", t);
+        goto out;
     }
 
-    return PL_type_error("callable", t);
+    arg = PL_new_term_ref();
+
+    if (!(values = malloc(sizeof(*pv->params) * pv->size))) {
+        rc = PL_resource_error("memory");
+        goto out;
+    }
+
+    for (size_t i = 0; i < pv->size; i++) {
+        _PL_get_arg(i + 1, t, arg);
+        if (!(rc = clingo_status(get_value(arg, &values[i], FALSE)))) {
+            goto out;
+        }
+    }
+
+    pv->params = values;
+    pv->name = PL_atom_chars(name);
+    values = NULL;
+
+out:
+    if (values) {
+        free(values);
+    }
+    return rc;
 }
 
 static foreign_t pl_clingo_ground(term_t ccontrol, term_t parts) {
@@ -274,38 +279,45 @@ static foreign_t pl_clingo_ground(term_t ccontrol, term_t parts) {
     size_t plen = 0;
     int rc;
 
-    if (!get_clingo(ccontrol, &ctl)) {
-        return FALSE;
+    if (!(rc = get_clingo(ccontrol, &ctl))) {
+        goto out;
     }
+
     switch (PL_skip_list(parts, 0, &plen)) {
     case PL_LIST: {
         term_t tail = PL_copy_term_ref(parts);
         term_t head = PL_new_term_ref();
 
         if (!(part_vec = malloc(sizeof(*part_vec) * plen))) {
-            return PL_resource_error("memory");
+            rc = PL_resource_error("memory");
+            goto out;
         }
         memset(part_vec, 0, sizeof(*part_vec) * plen);
+
         for (size_t i = 0; PL_get_list(tail, head, tail); i++) {
-            if (!get_params(head, &part_vec[i])) {
-                rc = FALSE;
+            if (!(rc = get_params(head, &part_vec[i]))) {
                 goto out;
             }
         }
         break;
     }
-    default:
-        return PL_type_error("list", parts);
+    default: {
+        rc = PL_type_error("list", parts);
+        goto out;
+    }
     }
 
-    rc =
-        clingo_control_ground(ctl->control, part_vec, plen, call_function, ctl);
-    rc = clingo_status(rc);
+    if (!(rc = clingo_status(clingo_control_ground(ctl->control, part_vec, plen,
+                                                   call_function, ctl)))) {
+        goto out;
+    }
 
 out:
     if (part_vec) {
         for (size_t i = 0; i < plen; i++) {
-            free((void *)part_vec[i].params);
+            if (part_vec[i].params) {
+                free((void *)part_vec[i].params);
+            }
         }
         free(part_vec);
     }
@@ -320,24 +332,30 @@ static foreign_t pl_clingo_assign_external(term_t ccontrol, term_t Atom,
     clingo_truth_value_t value;
     int bv, rc;
 
-    if (!get_clingo(ccontrol, &ctl)) {
-        return FALSE;
+    if (!(rc = get_clingo(ccontrol, &ctl))) {
+        goto out;
     }
-    rc = get_value(Atom, &atom, FALSE);
-    if (!(rc = clingo_status(rc))) {
-        return FALSE;
+
+    if (!(rc = clingo_status(get_value(Atom, &atom, FALSE)))) {
+        goto out;
     }
+
     if (PL_is_variable(Value)) {
         value = clingo_truth_value_free;
     } else if (PL_get_bool_ex(Value, &bv)) {
         value = bv ? clingo_truth_value_true : clingo_truth_value_false;
     } else {
-        return FALSE;
+        rc = PL_domain_error("assign_external", Value);
+        goto out;
     }
 
-    rc = clingo_control_assign_external(ctl->control, atom, value);
+    if (!(rc = clingo_status(
+              clingo_control_assign_external(ctl->control, atom, value)))) {
+        goto out;
+    }
 
-    return clingo_status(rc);
+out:
+    return rc;
 }
 
 static foreign_t pl_clingo_release_external(term_t ccontrol, term_t Atom) {
@@ -345,23 +363,26 @@ static foreign_t pl_clingo_release_external(term_t ccontrol, term_t Atom) {
     clingo_symbol_t atom;
     int rc;
 
-    if (!get_clingo(ccontrol, &ctl)) {
-        return FALSE;
+    if (!(rc = get_clingo(ccontrol, &ctl))) {
+        goto out;
     }
 
-    rc = get_value(Atom, &atom, FALSE);
-    if (!(rc = clingo_status(rc))) {
-        return FALSE;
+    if (!(rc = clingo_status(get_value(Atom, &atom, FALSE)))) {
+        goto out;
     }
 
-    rc = clingo_control_release_external(ctl->control, atom);
+    if (!(rc = clingo_status(
+              clingo_control_release_external(ctl->control, atom)))) {
+        goto out;
+    }
 
-    return clingo_status(rc);
+out:
+    return rc;
 }
 
 static int unify_value(term_t t, clingo_symbol_t v) {
-    // NOTE: the clingo_symbol_* functions below only fail if applied to the
-    // wrong type
+    // NOTE: the clingo_symbol_* functions below only fail
+    //       if applied to the wrong type
     //       they do not allocate
     switch (clingo_symbol_type(v)) {
     case clingo_symbol_type_number: {
@@ -374,47 +395,60 @@ static int unify_value(term_t t, clingo_symbol_t v) {
         clingo_symbol_string(v, &str);
         return PL_unify_chars(t, PL_STRING | REP_UTF8, (size_t)-1, str);
     }
-    case clingo_symbol_type_infimum:
+    case clingo_symbol_type_infimum: {
         return PL_unify_term(t, PL_FUNCTOR, FUNCTOR_hash1, PL_ATOM, ATOM_inf);
-    case clingo_symbol_type_supremum:
+    }
+    case clingo_symbol_type_supremum: {
         return PL_unify_term(t, PL_FUNCTOR, FUNCTOR_hash1, PL_ATOM, ATOM_sup);
+    }
     case clingo_symbol_type_function: {
-        // FIXME: functions can have signs
+        // FIXME: functions can have signs represented as -f(x) in gringo
         char const *str;
         clingo_symbol_t const *args;
         size_t size;
+        int rc;
+
         clingo_symbol_name(v, &str);
         clingo_symbol_arguments(v, &args, &size);
+
         if (size == 0) {
-            return PL_unify_chars(t, PL_ATOM | REP_UTF8, (size_t)-1, str);
-        }
-        atom_t name = PL_new_atom(str);
-        if (PL_unify_functor(t, PL_new_functor(name, size))) {
-            term_t arg = PL_new_term_ref();
+            if (!(rc =
+                      PL_unify_chars(t, PL_ATOM | REP_UTF8, (size_t)-1, str))) {
+                goto out_function;
+            }
+        } else {
             clingo_symbol_t const *it, *ie;
+            atom_t name;
+            term_t arg;
             int i;
 
+            name = PL_new_atom(str);
+            if (!(rc = PL_unify_functor(t, PL_new_functor(name, size)))) {
+                goto out_function;
+            }
             PL_unregister_atom(name);
+
+            arg = PL_new_term_ref();
             for (i = 1, it = args, ie = it + size; it != ie; ++it, i++) {
                 _PL_get_arg(i, t, arg);
                 if (!unify_value(arg, *it)) {
-                    return FALSE;
+                    goto out_function;
                 }
             }
-
-            return TRUE;
         }
 
-        return FALSE;
+    out_function:
+        return rc;
     }
     default:
-        assert(0);
+        assert(FALSE);
         return FALSE;
     }
 }
 
 static int unify_list_from_span(term_t list, clingo_symbol_t const *syms,
                                 size_t slen) {
+    int rc;
     term_t tail = PL_copy_term_ref(list);
     term_t head = PL_new_term_ref();
     term_t tmp = PL_new_term_ref();
@@ -423,27 +457,32 @@ static int unify_list_from_span(term_t list, clingo_symbol_t const *syms,
     for (it = syms, ie = it + slen; it != ie; ++it) {
         PL_put_variable(tmp);
 
-        if (!unify_value(tmp, *it) || !PL_unify_list(tail, head, tail) ||
-            !PL_unify(head, tmp)) {
-            return FALSE;
+        if (!(rc = (unify_value(tmp, *it) && PL_unify_list(tail, head, tail) &&
+                    PL_unify(head, tmp)))) {
+            goto out;
         }
     }
 
-    return PL_unify_nil(tail);
+    if (!(rc = PL_unify_nil(tail))) {
+        goto out;
+    }
+out:
+    return rc;
 }
 
 static int unify_model(term_t t, int show, clingo_model_t *model) {
-    clingo_symbol_t *atoms;
+    clingo_symbol_t *atoms = NULL;
     size_t alen;
     int rc;
 
-    if (!clingo_status(clingo_model_symbols_size(model, show, &alen))) {
-        return FALSE;
+    if (!(rc = clingo_status(clingo_model_symbols_size(model, show, &alen)))) {
+        goto out;
     }
 
     atoms = malloc(sizeof(*atoms) * alen);
     if (!atoms) {
-        return PL_resource_error("memory");
+        rc = PL_resource_error("memory");
+        goto out;
     }
 
     if (!(rc = clingo_status(clingo_model_symbols(model, show, atoms, alen)))) {
@@ -470,6 +509,7 @@ static int get_assumption(term_t t, clingo_symbolic_literal_t *assump) {
 }
 
 static int get_show_map(term_t t, int *map) {
+    int rc;
     term_t tail = PL_copy_term_ref(t);
     term_t head = PL_new_term_ref();
 
@@ -477,26 +517,31 @@ static int get_show_map(term_t t, int *map) {
     while (PL_get_list(tail, head, tail)) {
         atom_t a;
 
-        if (PL_get_atom_ex(head, &a)) {
-            if (a == ATOM_atoms) {
-                *map |= clingo_show_type_atoms;
-            } else if (a == ATOM_terms) {
-                *map |= clingo_show_type_terms;
-            } else if (a == ATOM_shown) {
-                *map |= clingo_show_type_shown;
-            } else if (a == ATOM_csp) {
-                *map |= clingo_show_type_csp;
-            } else if (a == ATOM_comp) {
-                *map |= clingo_show_type_complement;
-            } else {
-                return PL_domain_error("clingo_show", head);
-            }
+        if (!(rc = PL_get_atom_ex(head, &a))) {
+            goto out;
+        }
+
+        if (a == ATOM_atoms) {
+            *map |= clingo_show_type_atoms;
+        } else if (a == ATOM_terms) {
+            *map |= clingo_show_type_terms;
+        } else if (a == ATOM_shown) {
+            *map |= clingo_show_type_shown;
+        } else if (a == ATOM_csp) {
+            *map |= clingo_show_type_csp;
+        } else if (a == ATOM_comp) {
+            *map |= clingo_show_type_complement;
         } else {
-            return FALSE;
+            rc = PL_domain_error("clingo_show", head);
+            goto out;
         }
     }
 
-    return PL_get_nil_ex(tail);
+    if (!(rc = PL_get_nil_ex(tail))) {
+        goto out;
+    }
+out:
+    return rc;
 }
 
 typedef struct solve_state {
@@ -506,101 +551,91 @@ typedef struct solve_state {
 
 static foreign_t pl_clingo_solve(term_t ccontrol, term_t assumptions,
                                  term_t Show, term_t Model, control_t h) {
-    solve_state state_buf;
-    solve_state *state = &state_buf;
-
-    switch (PL_foreign_control(h)) {
-    case PL_FIRST_CALL: {
-        clingo_model_t *model;
-        clingo_symbolic_literal_t *assump_vec = NULL;
+    int rc = TRUE;
+    solve_state *state = NULL;
+    clingo_symbolic_literal_t *assump_vec = NULL;
+    int control = PL_foreign_control(h);
+    if (control == PL_FIRST_CALL) {
         size_t alen = 0;
-        int rc;
 
+        if (!(state = malloc(sizeof(*state)))) {
+            rc = PL_resource_error("memory");
+            goto out;
+        }
         memset(state, 0, sizeof(*state));
-        if (!get_clingo(ccontrol, &state->ctl)) {
-            return FALSE;
+
+        if (!(rc = get_clingo(ccontrol, &state->ctl))) {
+            goto out;
         }
 
-        switch (PL_skip_list(assumptions, 0, &alen)) {
-        case PL_LIST: {
-            term_t tail = PL_copy_term_ref(assumptions);
-            term_t head = PL_new_term_ref();
-
-            if (!(assump_vec = malloc(sizeof(*assump_vec) * alen))) {
-                return PL_resource_error("memory");
-            }
-            memset(assump_vec, 0, sizeof(*assump_vec) * alen);
-            for (size_t i = 0; PL_get_list(tail, head, tail); i++) {
-                int crc;
-
-                if (!(crc = get_assumption(head, &assump_vec[i]))) {
-                    rc = clingo_status(crc);
-                    goto out;
-                }
-            }
-            break;
-        }
-        default:
+        if (PL_skip_list(assumptions, 0, &alen) != PL_LIST) {
             rc = PL_type_error("list", assumptions);
             goto out;
         }
 
-        rc = clingo_control_solve_iteratively(state->ctl->control, assump_vec,
-                                              alen, &state->it);
-        rc = clingo_status(rc);
+        term_t tail = PL_copy_term_ref(assumptions);
+        term_t head = PL_new_term_ref();
 
-    out:
-        if (assump_vec) {
-            free(assump_vec);
+        if (!(assump_vec = malloc(sizeof(*assump_vec) * alen))) {
+            rc = PL_resource_error("memory");
+            goto out;
         }
-        if (!rc) {
-        out_false:
-            if (state != &state_buf) {
-                free(state);
+        memset(assump_vec, 0, sizeof(*assump_vec) * alen);
+        for (size_t i = 0; PL_get_list(tail, head, tail); i++) {
+            if (!(rc = clingo_status(get_assumption(head, &assump_vec[i])))) {
+                goto out;
             }
-            return FALSE;
         }
-    next:
-        rc = clingo_status(clingo_solve_iteratively_next(state->it, &model));
-        if (rc && model) {
+
+        if (!(rc = clingo_status(clingo_control_solve_iteratively(
+                  state->ctl->control, assump_vec, alen, &state->it)))) {
+            goto out;
+        }
+    } else {
+        state = PL_foreign_context_address(h);
+    }
+
+    while (control != PL_PRUNED) {
+        clingo_model_t *model;
+
+        if (!(rc = clingo_status(
+                  clingo_solve_iteratively_next(state->it, &model)))) {
+            goto out;
+        }
+        if (model) {
             int show;
 
-            if (!get_show_map(Show, &show)) {
-                goto out_false;
+            if (!(rc = get_show_map(Show, &show))) {
+                goto out;
             }
 
-            if (!unify_model(Model, show, model)) {
+            if (!(rc = unify_model(Model, show, model))) {
                 if (PL_exception(0)) {
-                    goto out_false;
+                    goto out;
                 }
-                goto next;
+            } else {
+                PL_retry_address(state);
+                state = NULL;
+                break;
             }
-            if (state == &state_buf) {
-                if (!(state = malloc(sizeof(*state)))) {
-                    state = &state_buf;
-                    PL_resource_error("memory");
-                    goto out_false;
-                }
-                *state = state_buf;
-            }
-            PL_retry_address(state);
+
         } else {
-            clingo_solve_iteratively_close(state->it);
-            goto out_false;
+            rc = FALSE;
+            break;
         }
     }
-    case PL_REDO: {
-        state = PL_foreign_context_address(h);
-        goto next;
+
+out:
+    if (assump_vec) {
+        free(assump_vec);
     }
-    case PL_PRUNED:
-    default: {
-        state = PL_foreign_context_address(h);
-        clingo_solve_iteratively_close(state->it);
+    if (state) {
+        if (state->it) {
+            clingo_solve_iteratively_close(state->it);
+        }
         free(state);
-        return TRUE;
     }
-    }
+    return rc;
 }
 
 ////////////////////////////// CALLBACK //////////////////////////////
@@ -635,105 +670,120 @@ static bool get_value(term_t t, clingo_symbol_t *val, int minus) {
         return false;
     }
     case PL_TERM: {
+        bool rc;
+        term_t arg;
         atom_t name;
         size_t arity; /* TBD: -atom, #const */
+        clingo_symbol_t *values = NULL;
 
-        if (get_name_arity(t, &name, &arity)) {
-            term_t arg = PL_new_term_ref();
+        if (!(rc = get_name_arity(t, &name, &arity))) {
+            clingo_set_error(clingo_error_runtime, "prolog error");
+            goto out_term;
+        }
+        arg = PL_new_term_ref();
 
-            if (name == ATOM_minus && arity == 1) {
-                return get_value(arg, val, TRUE);
-            } else if (name == ATOM_hash && arity == 1) {
-                atom_t a;
+        if (name == ATOM_minus && arity == 1) {
+            if (!(rc = get_value(arg, val, TRUE))) {
+                goto out_term;
+            }
+        } else if (name == ATOM_hash && arity == 1) {
+            atom_t a;
 
-                _PL_get_arg(1, t, arg);
-                if (PL_get_atom_ex(arg, &a)) {
-                    if (a == ATOM_inf) {
-                        clingo_symbol_create_infimum(val);
-                        return true;
-                    } else if (a == ATOM_sup) {
-                        clingo_symbol_create_supremum(val);
-                        return true;
-                    } else {
-                        PL_domain_error("clingo_keyword", arg);
-                    }
-                }
+            _PL_get_arg(1, t, arg);
+            if (!(rc = PL_get_atom_ex(arg, &a))) {
+                clingo_set_error(clingo_error_runtime, "prolog error");
+                goto out_term;
+            }
 
-                return false;
+            if (a == ATOM_inf) {
+                clingo_symbol_create_infimum(val);
+            } else if (a == ATOM_sup) {
+                clingo_symbol_create_supremum(val);
             } else {
-                const char *id = PL_atom_chars(name); /* TBD: errors */
-                clingo_symbol_t *values;
-                bool ret;
-                size_t i;
+                rc = false;
+                clingo_set_error(clingo_error_runtime, "bad value");
+                goto out_term;
+            }
+        } else {
+            const char *id = PL_atom_chars(name); /* TBD: errors */
+            size_t i;
 
-                if (!(values = malloc(sizeof(*values) * arity))) {
-                    return false;
+            if (!(values = malloc(sizeof(*values) * arity))) {
+                rc = false;
+                clingo_set_error(clingo_error_bad_alloc, "memory");
+                goto out_term;
+            }
+
+            for (i = 0; i < arity; i++) {
+                _PL_get_arg(i + 1, t, arg);
+                if (!(rc = get_value(arg, &values[i], FALSE))) {
+                    goto out_term;
                 }
+            }
+            PL_reset_term_refs(arg);
 
-                for (i = 0; i < arity; i++) {
-                    _PL_get_arg(i + 1, t, arg);
-                    if (!get_value(arg, &values[i], FALSE)) {
-                        free(values);
-                        return false;
-                    }
-                }
-                PL_reset_term_refs(arg);
-
-                ret = clingo_symbol_create_function(id, values, arity, !minus,
-                                                   val);
-                free(values);
-
-                return ret;
+            if (!(rc = clingo_symbol_create_function(id, values, arity, !minus,
+                                                     val))) {
+                goto out_term;
             }
         }
-
-        return false;
+    out_term:
+        if (values) {
+            free(values);
+        }
+        return rc;
     }
     default:
-        PL_type_error("clingo_value", t);
+        clingo_set_error(clingo_error_runtime, "bad value");
         return false;
     }
 }
 
 static bool call_function(clingo_location_t loc, char const *name,
-                                    clingo_symbol_t const *in, size_t ilen,
-                                    void *closure, clingo_symbol_callback_t *cb,
-                                    void *cb_closure) {
+                          clingo_symbol_t const *in, size_t ilen, void *closure,
+                          clingo_symbol_callback_t *cb, void *cb_closure) {
     (void)loc;
     (void)closure;
     static predicate_t pred = 0;
     fid_t fid = 0;
     qid_t qid = 0;
+    term_t av;
     bool rc = true;
 
     if (!pred) {
         pred = PL_predicate("inject_values", 3, "clingo");
     }
 
-    if ((fid = PL_open_foreign_frame())) {
-        term_t av = PL_new_term_refs(3);
+    if (!(fid = PL_open_foreign_frame())) {
+        rc = false;
+        clingo_set_error(clingo_error_runtime, "prolog error");
+        goto out;
+    }
 
-        PL_put_atom_chars(av + 0, name);
-        unify_list_from_span(av + 1, in, ilen);
-        if ((qid = PL_open_query(NULL, PL_Q_PASS_EXCEPTION, pred, av))) {
-            while (PL_next_solution(qid)) {
-                clingo_symbol_t value;
-                if (!get_value(av + 2, &value, FALSE)) {
-                    goto error;
-                }
-                cb(&value, 1, cb_closure);
+    av = PL_new_term_refs(3);
+
+    PL_put_atom_chars(av + 0, name);
+    if (!(rc = unify_list_from_span(av + 1, in, ilen))) {
+        clingo_set_error(clingo_error_runtime, "prolog error");
+        goto out;
+    }
+    if ((qid = PL_open_query(NULL, PL_Q_PASS_EXCEPTION, pred, av))) {
+        while (PL_next_solution(qid)) {
+            clingo_symbol_t value;
+            if (!(rc = get_value(av + 2, &value, FALSE))) {
+                goto out;
             }
-            if (PL_exception(0)) {
-                goto error;
+            if (!(rc = cb(&value, 1, cb_closure))) {
+                goto out;
             }
         }
-    } else {
-        goto error;
+        if (PL_exception(0)) {
+            rc = false;
+            clingo_set_error(clingo_error_runtime, "prolog error");
+            goto out;
+        }
     }
-    goto out;
 
-error:
-    rc = false;
 out:
     if (qid) {
         PL_close_query(qid);
