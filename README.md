@@ -3,25 +3,24 @@
 This repository contains work in progress for embedding the Clingo ASP
 solver in SWI-Prolog.  To use this, you need:
 
-  - Clingo.  Currently you need to development version from the SVN
-    repo, which may be downloaded using
+  - Clingo.  You need clingo version 5, which is available on github:
 
     ```{shell}
-    svn co http://svn.code.sf.net/p/potassco/code/branches/gringo-claspoutput
+    git clone https://github.com/potassco/clingo.git
     ```
 
   - A recent copy of the _development_ version of SWI-Prolog (7.3.x)
 
 Please consult the file `INSTALL` in   the downloaded clingo version and
-install   the   target    **cexample**    as     shown    below.    Omit
+build   the   target    **libclingo**    as     shown    below.    Omit
 `--build-dir=release` to compile the debug version.
 
 ```{shell}
-scons --build-dir=release cexample
+scons --build-dir=release libclingo
 ```
 
-After both SWI-Prolog and Clingo are installed, edit `Makefile` to suit
-your installation. See instructions in the file. After that running
+After both SWI-Prolog and Clingo are installed, edit the `Makefile` to
+suit your installation. See instructions in the file. After that running
 `make` should suffice to build the interface. The interface may be
 tested by running e.g.:
 
@@ -67,4 +66,6 @@ changing world:
 
   - The Clingo user guide can be found here
     - http://sourceforge.net/projects/potassco/files/guide/2.0/
+  - The Clingo C API is documented here
+    - https://potassco.github.io/clingo/
 
