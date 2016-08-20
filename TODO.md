@@ -1,5 +1,4 @@
 - Add info to the Prolog context to
-  - Avoid illegal (threaded) usage		[OK]
   - Add clingo_close/1				[OK]
   - Leak due to call_function			[OK]
   - Keep track of loaded program and params
@@ -25,12 +24,26 @@
     --> xref_context(dsl, DSL).
   - Incremental colouring can ask for this too
 
-# BUGS
+- Syntax errors are printed:
 
-## Syntax errors are printed:
+          ?- const(M).
+          <block>:1:15-16: error: syntax error, unexpected <IDENTIFIER>
 
-?- const(M).
-<block>:1:15-16: error: syntax error, unexpected <IDENTIFIER>
+          ERROR: Unknown error term: clingo_error('runtime error')
+          ?-
 
-ERROR: Unknown error term: clingo_error('runtime error')
-?-
+  - Such mesages can be intercepted registering a logger (the
+    [clingo\_logger\_t
+    callback](https://potassco.github.io/clingo/group__BasicTypes.html#gaff11abc056335394295ce2ffdc88daac)).
+
+- Thread-safety
+  - Clingo's control objects are not thread-safe. If there are more than two
+    concurrent calls involving the same control object, a logic error should be
+    raised.
+
+- Error checking
+  - not all return values of clingo functions are checked
+  - there are a lot of prolog functions whose return values are not checked
+    (even though not all of them might need checking)
+
+- the sign of functions is not handled in unify\_value
