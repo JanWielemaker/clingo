@@ -37,8 +37,8 @@
     callback](https://potassco.github.io/clingo/group__BasicTypes.html#gaff11abc056335394295ce2ffdc88daac)).
 
 - Thread-safety
-  - Clingo's control objects are not thread-safe. If there are more than two
-    concurrent calls involving the same control object, a logic error should be
+  - Clingo's control objects are not thread-safe. If there are concurrent 
+    calls involving the same control object, a logic error should be
     raised.
 
 - Error checking
