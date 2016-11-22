@@ -12,8 +12,8 @@ SWIPL?=swipl
 
 COFLAGS?=-gdwarf-2 -g3 -O0
 
-CLINGOLIBDIR=$(CLINGOHOME)/build/$(BUILD)
-CFLAGS=-I$(CLINGOHOME)/libgringo -W -Wall $(COFLAGS)
+CLINGOLIBDIR=$(CLINGOHOME)/build/$(BUILD)/bin
+CFLAGS=-I$(CLINGOHOME)/libclingo -W -Wall $(COFLAGS)
 LIBS=-L$(CLINGOLIBDIR) -lclingo
 LDFLAGS=-cc-options,-std=c99 -Wl,-rpath=/home/wv/bin/linux/64/swipl/lib/swipl-7.3.15/lib/x86_64-linux -shared
 SO=so

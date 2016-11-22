@@ -55,7 +55,7 @@ flags = [
 '-DNDEBUG',
 '-xc++',
 '-std=c99',
-'-I{home}/clingo-5/libgringo'.format(home=os.path.expanduser("~")),
+'-I{home}/clingo-5/libclingo'.format(home=os.path.expanduser("~")),
 ] + swipl_include()
 
 # Set this to the absolute path to the folder (NOT the file!) containing the

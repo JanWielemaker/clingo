@@ -24,9 +24,9 @@ static functor_t FUNCTOR_clingo_error1;
 
 static bool get_value(term_t t, clingo_symbol_t *val, int minus);
 
-static bool call_function(clingo_location_t, char const *,
+static bool call_function(clingo_location_t const *, char const *,
                           clingo_symbol_t const *, size_t, void *,
-                          clingo_symbol_callback_t *, void *);
+                          clingo_symbol_callback_t, void *);
 
 #ifndef PL_ARITY_AS_SIZE
 int get_name_arity(term_t t, atom_t *name, size_t *arity) {
@@ -739,9 +739,9 @@ static bool get_value(term_t t, clingo_symbol_t *val, int minus) {
     }
 }
 
-static bool call_function(clingo_location_t loc, char const *name,
+static bool call_function(clingo_location_t const *loc, char const *name,
                           clingo_symbol_t const *in, size_t ilen, void *closure,
-                          clingo_symbol_callback_t *cb, void *cb_closure) {
+                          clingo_symbol_callback_t cb, void *cb_closure) {
     (void)loc;
     (void)closure;
     static predicate_t pred = 0;
