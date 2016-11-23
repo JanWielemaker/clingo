@@ -1,0 +1,228 @@
+term = Symbol( location : Location
+        , symbol   : clingo.Symbol
+        )
+     | Variable( location : Location
+        , name     : str
+        )
+     | UnaryOperation( location : Location
+        , operator : UnaryOperator
+        , argument : term
+        )
+     | BinaryOperation( location : Location
+        , operator : BinaryOperator
+        , left     : term
+        , right    : term
+        )
+     | Interval( location : Location
+        , left     : term
+        , right    : term
+        )
+     | Function( location  : Location
+        , name      : str
+        , arguments : term*
+        , external  : bool
+        )
+     | Pool( location  : Location
+        , arguments : term*
+        ).
+
+csp_term = CSPSum( location : Location
+            , terms    : CSPProduct( location    : Location
+                          , coefficient : term
+                          , variable    : term?
+                          )* ).
+
+theory_term = Symbol( location : Location
+               , symbol   : clingo.Symbol
+               )
+            | Variable( location : Location
+               , name     : str
+               )
+            | TheoryTermSequence( location : Location
+               , sequence_type : TheorySequenceType
+               , terms         : theory_term*
+               )
+            | TheoryFunction( location  : Location
+               , name      : str
+               , arguments : theory_term*
+               )
+            | TheoryUnparsedTerm( location : Location
+               , elements : TheoryUnparsedTermElement( operators : str*
+                             , term      : theory_term
+                             )+
+               ).
+
+% -- Literals
+
+symbolic_atom = SymbolicAtom( term : term
+                 ).
+
+literal = Literal( location : Location
+           , sign     : Sign
+           , atom     : Comparison( comparison : ComparisonOperator
+                         , left       : term
+                         , right      : term
+                         )
+                      | BooleanConstant( value : bool
+                         )
+                      | symbolic_atom
+           )
+
+        | CSPLiteral( location : Location
+           , term     : csp_term
+           , guards   : CSPGuard( comparison : ComparisonOperator
+                         , term       : csp_term
+                         )+ ).
+
+% -- Head and Body Literals
+
+aggregate_guard = AggregateGuard( comparison : ComparisonOperator
+                   , term       : term
+                   ).
+
+conditional_literal = ConditionalLiteral( location  : Location
+                       , literal   : Literal
+                       , condition : Literal*
+                       ).
+
+aggregate = Aggregate( location    : Location
+             , left_guard  : aggregate_guard?
+             , elements    : conditional_literal*
+             , right_guard : aggregate_guard?
+             ).
+
+theory_atom = TheoryAtom( location : Location
+               , term     : term
+               , elements : TheoryAtomElement( tuple     : theory_term*
+                             , condition : literal*
+                             )*
+               , guard    : TheoryGuard( operator_name : str
+                             , term          : theory_term
+                             )? ).
+
+body_atom = aggregate
+          | BodyAggregate( location    : Location
+             , left_guard  : aggregate_guard?
+             , function    : AggregateFunction
+             , elements    : BodyAggregateElement( tuple     : term*
+                              , condition : literal*
+                              )*
+             , right_guard : aggregate_guard?
+             )
+          | Disjoint( location : Location
+             , elements : DisjointElement( location  : Location
+                           , tuple     : term*
+                           , term      : csp_term
+                           , condition : literal*
+                           )*
+             )
+          | theory_atom.
+
+body_literal = literal
+             | conditional_literal
+             | Literal( location : Location
+                , sign     : Sign
+                , atom     : body_atom
+                ).
+
+head = literal
+     | aggregate
+     | HeadAggregate( location    : Location
+        , left_guard  : aggregate_guard?
+        , function    : AggregateFunction
+        , elements    : HeadAggregateElement( tuple     : term*
+                         , condition : conditional_literal
+                         )*
+        , right_guard : aggregate_guard?
+        )
+     | Disjunction( location : Location
+        , elements : conditional_literal*
+        )
+     | theory_atom.
+
+%-- Theory Definitions
+
+theory = TheoryDefinition( location : Location
+          , name     : str
+          , terms    : TheoryTermDefinition( location  : Location
+                        , name      : str
+                        , operators : TheoryOperatorDefinition( location      : Location
+                                       , name          : str
+                                       , priority      : int
+                                       , operator_type : TheoryOperatorType
+                                       )*
+                        )
+          , atoms    : TheoryAtomDefinition( location  : Location
+                        , atom_type : TheoryAtomType
+                        , name      : str
+                        , arity     : int
+                        , elements  : str*
+                        , guard     : TheoryGuardDefinition( operators : str*
+                                       , term      : str
+                                       )?
+                        )
+          ).
+
+%-- Statements
+
+statement = Rule( location : Location
+             , head     : head
+             , body     : body_literal*
+             )
+          | Definition( location   : Location
+             , name       : str
+             , value      : term
+             , is_default : bool
+	     )
+          | ShowSignature( location   : Location
+             , name       : str
+             , arity      : int
+             , sign       : bool
+             , csp        : bool
+             )
+          | ShowTerm( location : Location
+             , term     : term
+             , body     : body_literal*
+             , csp      : bool
+             )
+          | Minimize( location : Location
+             , weight   : term
+             , priority : term
+             , tuple    : term*
+             , body     : body_literal*
+             )
+          | Script( location    : Location
+             , script_type : ScriptType
+             , code        : str
+             )
+          | Program( location   : Location
+             , name       : str
+             , parameters : Id( location : Location
+                             , id       : str
+                             )*
+             )
+          | External( location : Location
+             , atom     : symbolic_atom
+             , body     : body_literal*
+             )
+          | Edge( location : Location
+             , u        : term
+             , v        : term
+             , body     : body_literal*
+             )
+          | Heuristic( location : Location
+             , atom     : symbolic_atom
+             , body     : body_literal*
+             , bias     : term
+             , priority : term
+             , modifier : term
+             )
+          | ProjectAtom( location : Location
+             , atom     : symbolic_atom
+             , body     : body_literal*
+             )
+          | ProjectSignature( location   : Location
+             , name       : str
+             , arity      : int
+             , positive   : bool
+             ).
