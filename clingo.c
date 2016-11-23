@@ -21,6 +21,7 @@ static functor_t FUNCTOR_hash1;
 static functor_t FUNCTOR_tilde1;
 static functor_t FUNCTOR_error2;
 static functor_t FUNCTOR_clingo_error1;
+static functor_t FUNCTOR_minus1;
 
 static bool get_value(term_t t, clingo_symbol_t *val, int minus);
 
@@ -402,11 +403,18 @@ static int unify_value(term_t t, clingo_symbol_t v) {
         return PL_unify_term(t, PL_FUNCTOR, FUNCTOR_hash1, PL_ATOM, ATOM_sup);
     }
     case clingo_symbol_type_function: {
-        // FIXME: functions can have signs represented as -f(x) in gringo
         char const *str;
         clingo_symbol_t const *args;
         size_t size;
         int rc;
+	bool is_pos;
+
+	clingo_symbol_is_positive(v, &is_pos);
+	if ( !is_pos ) {
+	  if ( (rc=( PL_unify_functor(v, FUNCTOR_minus1) &&
+		     PL_get_arg(1, v, v))) )
+	    goto out_function;
+	}
 
         clingo_symbol_name(v, &str);
         clingo_symbol_arguments(v, &args, &size);
@@ -809,6 +817,7 @@ install_t install_clingo(void) {
     FUNCTOR_tilde1 = PL_new_functor(PL_new_atom("~"), 1);
     FUNCTOR_clingo_error1 = PL_new_functor(PL_new_atom("clingo_error"), 1);
     FUNCTOR_error2 = PL_new_functor(PL_new_atom("error"), 2);
+    FUNCTOR_minus1 = PL_new_functor(ATOM_minus, 1);
 
     PL_register_foreign("clingo_new", 2, pl_clingo_new, 0);
     PL_register_foreign("clingo_close", 1, pl_clingo_close, 0);
