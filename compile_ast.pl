@@ -3,21 +3,10 @@
 :- op(200, yf, +).
 
 load_ast(Types) :-
-	read_ast('clingo.ast', Statements0),
-	maplist(clean_statement, Statements0, Statements),
+	read_ast('clingo.ast', Statements),
 	phrase(ast_types(Statements), Types),
 	maplist(declare, Types),
 	maplist(translate, Types).
-
-clean_statement((Name=Def1|Union), Name=List) :- !,
-	phrase(bar_list((Def1|Union)), List).
-clean_statement(Clean, Clean).
-
-bar_list((H|T)) --> !,
-	[H],
-	bar_list(T).
-bar_list(H) -->
-	[H].
 
 read_ast(File, AST) :-
 	setup_call_cleanup(
@@ -42,6 +31,10 @@ ast_types([H|T]) -->
 	ast_type(H),
 	ast_types(T).
 
+ast_type((Name=Def1|Union)) --> !,
+	{ phrase(bar_list((Def1|Union)), List) },
+	[Name=List],
+	union_types(List).
 ast_type(Name=Union) -->
 	{ is_list(Union) }, !,
 	[Name=Union],
@@ -95,7 +88,7 @@ declare(Name=Struct) :-
 	       [Name, Name]), !.
 declare(Struct) :-
 	Struct \= (_=_),
-	struct_member_name(Struct, CType),
+	struct_member_name(Struct, CType), !,
 	declare(CType=Struct).
 declare(Term) :-
 	format('TODO: ~p~n', [Term]).
@@ -127,7 +120,7 @@ translate(Name=Struct) :-
 	format('}~n~n', []), !.
 translate(Struct) :-
 	Struct \= (_=_),
-	struct_member_name(Struct, CType),
+	struct_member_name(Struct, CType), !,
 	translate(CType=Struct).
 translate(Term) :-
 	format('TODO: ~p~n', [Term]).
@@ -185,6 +178,16 @@ struct_member_name(Compound, CType) :-
 	functor(Compound, Type, _),
 	clingo_name(Type, CType).
 
+		 /*******************************
+		 *	      UTIL		*
+		 *******************************/
+
+bar_list((H|T)) --> !,
+	[H],
+	bar_list(T).
+bar_list(H) -->
+	[H].
+
 clingo_name(Capitalised, ClingoName) :-
 	camel_snake(Capitalised, ClingoName).
 
@@ -201,7 +204,8 @@ snake([0'_,H|T]) -->
 	},
 	snake(T).
 snake([H|T]) -->
-	[H],
+	[H], !,
 	snake(T).
 snake([]) -->
 	[].
+
