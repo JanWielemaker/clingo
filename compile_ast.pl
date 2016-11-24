@@ -29,6 +29,7 @@ translate_ast :-
 	read_ast('clingo.ast', Statements),
 	phrase(ast_types(Statements), Types0),
 	list_to_set(Types0, Types),
+%	pp(Types),
 	header,
 	maplist(declare, Types),
 	format('~n', []),
@@ -58,6 +59,8 @@ read_ast_stream(In, List) :-
 	    read_ast_stream(In, T)
 	).
 
+%%	ast_types(+Statements)//
+
 ast_types([]) --> [].
 ast_types([H|T]) -->
 	ast_type(H),
@@ -66,19 +69,20 @@ ast_types([H|T]) -->
 ast_type((Name=Def1|Union)) --> !,
 	{ phrase(bar_list((Def1|Union)), List) },
 	[Name=List],
-	union_types(List).
+	union_types(List, Name).
 ast_type(Name=Union) -->
 	{ is_list(Union) }, !,
 	[Name=Union],
-	union_types(Union).
+	union_types(Union, Name).
 ast_type(Name=Type) -->
 	[Name=Type],
 	subtypes(Type).
 
-union_types([]) --> [].
-union_types([H|T]) -->
+union_types([], _) --> [].
+union_types([H|T], Name) -->
+	[ union_of(Name, H) ],
 	subtypes(H),
-	union_types(T).
+	union_types(T, Name).
 
 subtypes(Struct) -->
 	{ Struct =.. [_|Args] },
