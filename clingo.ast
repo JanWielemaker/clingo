@@ -26,8 +26,8 @@ term = Symbol( location : Location
         , arguments : term*
         ).
 
-csp_term = CSPSum( location : Location
-            , terms    : CSPProduct( location    : Location
+csp_sum_term = CSPSum( location : Location
+            , terms    : CSPProductTerm( location    : Location
                           , coefficient : term
                           , variable    : term?
                           )* ).
@@ -57,21 +57,18 @@ theory_term = Symbol( location : Location
 symbolic_atom = SymbolicAtom( term : term
                  ).
 
-literal = Literal( location : Location
-           , sign     : Sign
-           , atom     : Comparison( comparison : ComparisonOperator
+literal = Comparison( comparison : ComparisonOperator
                          , left       : term
                          , right      : term
                          )
-                      | BooleanConstant( value : bool
-                         )
-                      | symbolic_atom
-           )
-
+	| BooleanConstant( value : bool
+	   )
+	| symbolic_atom
         | CSPLiteral( location : Location
-           , term     : csp_term
+           , sign     : Sign
+           , term     : csp_sum_term
            , guards   : CSPGuard( comparison : ComparisonOperator
-                         , term       : csp_term
+                         , term       : csp_sum_term
                          )+ ).
 
 % -- Head and Body Literals
@@ -112,7 +109,7 @@ body_atom = aggregate
           | Disjoint( location : Location
              , elements : DisjointElement( location  : Location
                            , tuple     : term*
-                           , term      : csp_term
+                           , term      : csp_sum_term
                            , condition : literal*
                            )*
              )
