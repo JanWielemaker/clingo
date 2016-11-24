@@ -248,8 +248,8 @@ unify_ast_function_u_term(term_t t, const clingo_ast_term_t *ast) {
     return FALSE;
   {
     size_t i;
-    term_t head = PL_copy_term_ref(tmp);
-    term_t tail = PL_new_term_ref();
+    term_t tail = PL_copy_term_ref(tmp);
+    term_t head = PL_new_term_ref();
 
     for(i=0; i<ast->function->size; i++) {
       if ( !PL_unify_list(tail, head, tail) )
@@ -285,8 +285,8 @@ unify_ast_external_function_u_term(term_t t, const clingo_ast_term_t *ast) {
     return FALSE;
   {
     size_t i;
-    term_t head = PL_copy_term_ref(tmp);
-    term_t tail = PL_new_term_ref();
+    term_t tail = PL_copy_term_ref(tmp);
+    term_t head = PL_new_term_ref();
 
     for(i=0; i<ast->external_function->size; i++) {
       if ( !PL_unify_list(tail, head, tail) )
@@ -318,8 +318,8 @@ unify_ast_pool_u_term(term_t t, const clingo_ast_term_t *ast) {
     return FALSE;
   {
     size_t i;
-    term_t head = PL_copy_term_ref(tmp);
-    term_t tail = PL_new_term_ref();
+    term_t tail = PL_copy_term_ref(tmp);
+    term_t head = PL_new_term_ref();
 
     for(i=0; i<ast->pool->size; i++) {
       if ( !PL_unify_list(tail, head, tail) )
@@ -467,8 +467,8 @@ unify_ast_rule_u_statement(term_t t, const clingo_ast_statement_t *ast) {
     return FALSE;
   {
     size_t i;
-    term_t head = PL_copy_term_ref(tmp);
-    term_t tail = PL_new_term_ref();
+    term_t tail = PL_copy_term_ref(tmp);
+    term_t head = PL_new_term_ref();
 
     for(i=0; i<ast->rule->size; i++) {
       if ( !PL_unify_list(tail, head, tail) )
@@ -504,8 +504,8 @@ unify_ast_program_u_statement(term_t t, const clingo_ast_statement_t *ast) {
     return FALSE;
   {
     size_t i;
-    term_t head = PL_copy_term_ref(tmp);
-    term_t tail = PL_new_term_ref();
+    term_t tail = PL_copy_term_ref(tmp);
+    term_t head = PL_new_term_ref();
 
     for(i=0; i<ast->program->size; i++) {
       if ( !PL_unify_list(tail, head, tail) )
