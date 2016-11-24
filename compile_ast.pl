@@ -1,12 +1,44 @@
+:- module(ast,
+	  [ test/0,
+	    ast_interface/0,
+	    translate_ast/0
+	  ]).
+
 :- op(200, yf, ?).
 :- op(200, yf, *).
 :- op(200, yf, +).
 
-load_ast(Types) :-
+test :-
+	setup_call_cleanup(
+	    (	current_output(Old),
+		open(pipe(less), write, Out),
+		set_output(Out)
+	    ),
+	    translate_ast,
+	    (	set_output(Old),
+		close(Out)
+	    )).
+
+ast_interface :-
+	setup_call_cleanup(
+	    tell('ast_read.c'),
+	    translate_ast,
+	    told).
+
+translate_ast :-
 	read_ast('clingo.ast', Statements),
-	phrase(ast_types(Statements), Types),
+	phrase(ast_types(Statements), Types0),
+	list_to_set(Types0, Types),
+	header,
 	maplist(declare, Types),
+	format('~n', []),
 	maplist(translate, Types).
+
+header :-
+	format('#include <clingo.h>~n', []),
+	format('#include <SWI-Prolog.h>~n', []),
+	format('~n', []).
+
 
 read_ast(File, AST) :-
 	setup_call_cleanup(
@@ -18,7 +50,7 @@ read_ast(File, AST) :-
 	    set_prolog_flag(allow_variable_name_as_functor, false)).
 
 read_ast_stream(In, List) :-
-	read_term(In, H, [variable_names(Bindings)]),
+	read_term(In, H, [variable_names(Bindings), module(ast)]),
 	(   H == end_of_file
 	->  List = []
 	;   List = [H|T],
@@ -78,12 +110,12 @@ arg_type(_) -->
 
 declare(Name=Union) :-
 	is_list(Union),
-	format('static int~n\c
+	format('static int \c
 	        unify_ast_~w(term_t t, const clingo_ast_~w_t *ast);~n',
 	       [Name, Name]), !.
 declare(Name=Struct) :-
 	Struct =.. [_Type|_Args],
-	format('static int~n\c
+	format('static int \c
 		unify_ast_~w(term_t t, const clingo_ast_~w_t *ast);~n',
 	       [Name, Name]), !.
 declare(Struct) :-
@@ -109,10 +141,11 @@ translate(Name=Struct) :-
 		unify_ast_~w(term_t t, const clingo_ast_~w_t *ast) {~n',
 	       [Name, Name]),
 	length(Args, Arity),
-	format('  term_t tmp = PL_new_term_ref();~n~n', []),
-	format('  if ( !PL_unify_functor(t, \c
-					 PL_new_functor(PL_new_atom("~w"), \c
-							~w)) )~n', [Name, Arity]),
+	format('  term_t tmp = PL_new_term_ref();~n', []),
+	format('  static functor_t f = 0;~n~n', []),
+	format('  if ( !f )~n', []),
+	format('    f = PL_new_functor(PL_new_atom("~w"), ~w);~n', [Name, Arity]),
+	format('  if ( !PL_unify_functor(t, f) )~n', []),
 	format('    return FALSE;~n~n'),
 	forall(nth1(I, Args, Arg),
 	       struct_member(I, Arg)),
