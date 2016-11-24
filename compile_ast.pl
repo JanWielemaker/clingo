@@ -305,7 +305,13 @@ size_name('list->terms', 'list->size') :- !.
 size_name('set->terms', 'set->size') :- !.
 size_name('terms', size) :- !.
 size_name('operators', size) :- !.
+%size_name('condition', size) :- !.
 size_name('unparsed_term->elements', 'unparsed_term->size') :- !.
+size_name('body_aggregate->elements', 'body_aggregate->size') :- !.
+size_name('head_aggregate->elements', 'head_aggregate->size') :- !.
+size_name('disjunction->elements', 'disjunction->size') :- !.
+size_name('rule->body', 'rule->size') :- !.
+size_name('program->parameters', 'program->size') :- !.
 size_name(Name, SizeName) :-
 	debug(ast(size), '~p ~p', [Name, SizeName]),
 	atom_concat(Name, '_size', SizeName).
