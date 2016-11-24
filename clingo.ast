@@ -1,15 +1,15 @@
 term = Symbol( location : Location
-        , symbol   : clingo.Symbol
+        , symbol   : Symbol
         )
      | Variable( location : Location
         , name     : str
         )
      | UnaryOperation( location : Location
-        , operator : UnaryOperator
+        , unary_operator : UnaryOperator
         , argument : term
         )
      | BinaryOperation( location : Location
-        , operator : BinaryOperator
+        , binary_operator : BinaryOperator
         , left     : term
         , right    : term
         )
@@ -20,7 +20,10 @@ term = Symbol( location : Location
      | Function( location  : Location
         , name      : str
         , arguments : term*
-        , external  : bool
+        )
+     | ExternalFunction( location  : Location
+        , name      : str
+        , arguments : term*
         )
      | Pool( location  : Location
         , arguments : term*
@@ -33,7 +36,7 @@ csp_sum_term = CSPSum( location : Location
                           )* ).
 
 theory_term = Symbol( location : Location
-               , symbol   : clingo.Symbol
+               , symbol   : Symbol
                )
             | Variable( location : Location
                , name     : str
@@ -77,19 +80,19 @@ aggregate_guard = AggregateGuard( comparison : ComparisonOperator
                    , term       : term
                    ).
 
-conditional_literal = ConditionalLiteral( location  : Location
-                       , literal   : Literal
+conditional_literal = ConditionalLiteral(
+                         literal   : Literal
                        , condition : Literal*
                        ).
 
-aggregate = Aggregate( location    : Location
-             , left_guard  : aggregate_guard?
+aggregate = Aggregate(
+               left_guard  : aggregate_guard?
              , elements    : conditional_literal*
              , right_guard : aggregate_guard?
              ).
 
-theory_atom = TheoryAtom( location : Location
-               , term     : term
+theory_atom = TheoryAtom(
+                 term     : term
                , elements : TheoryAtomElement( tuple     : theory_term*
                              , condition : literal*
                              )*
@@ -131,8 +134,12 @@ theory_atom = TheoryAtom( location : Location
                            )*
              ) .
 
-head = literal
-     | aggregate
+head_literal = Literal(
+	   location : Location,
+	   literal : literal)
+     | Aggregate(
+	   location : Location,
+	   aggregate : aggregate)
      | HeadAggregate( location    : Location
         , left_guard  : aggregate_guard?
         , function    : AggregateFunction
@@ -144,11 +151,13 @@ head = literal
      | Disjunction( location : Location
         , elements : conditional_literal*
         )
-     | theory_atom.
+     | TheoryAtom(
+	   location : Location,
+	   theory_atom : theory_atom) .
 
 %-- Theory Definitions
 
-theory = TheoryDefinition( location : Location
+theory_definition = TheoryDefinition( location : Location
           , name     : str
           , terms    : TheoryTermDefinition( location  : Location
                         , name      : str
@@ -172,7 +181,7 @@ theory = TheoryDefinition( location : Location
 %-- Statements
 
 statement = Rule( location : Location
-             , head     : head
+             , head     : head_literal
              , body     : body_literal*
              )
           | Definition( location   : Location
@@ -231,4 +240,5 @@ statement = Rule( location : Location
              , name       : str
              , arity      : int
              , positive   : bool
-             ).
+             )
+	  | theory_definition.

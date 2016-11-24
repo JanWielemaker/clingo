@@ -217,6 +217,10 @@ union_struct_member(_, I, sign:Arg) :- !,
 	struct_member(I, sign:Arg).
 union_struct_member(_, I, location:Arg) :- !,
 	struct_member(I, location:Arg).
+union_struct_member(_, I, symbol:Arg) :- !,
+	struct_member(I, symbol:Arg).
+union_struct_member(variable, I, name:Arg) :- !,
+	struct_member(I, variable:Arg).
 union_struct_member(Name, I, U:Arg) :-
 	format(atom(UName), '~w->~w', [Name, U]),
 	struct_member(I, UName:Arg).
@@ -243,7 +247,8 @@ struct_member(Name:Type*, Tmp, Indent) :-
 	format('~t~*|    int i;~n', [Indent]),
 	format('~t~*|    term_t head = PL_copy_term_ref(~w);~n', [Indent, Tmp]),
 	format('~t~*|    term_t tail = PL_new_term_ref();~n~n', [Indent]),
-	format('~t~*|    for(i=0; i<ast->~w_size; i++) {~n', [Indent, Name]),
+	size_name(Name, SizeName),
+	format('~t~*|    for(i=0; i<ast->~w; i++) {~n', [Indent, SizeName]),
 	format('~t~*|      if ( !PL_unify_list(tail, head, tail) )~n', [Indent]),
 	format('~t~*|        return FALSE;~n', [Indent]),
 	format(atom(Element), '~w[i]', [Name]),
@@ -267,6 +272,12 @@ struct_member_name(Type, CType) :-
 struct_member_name(Compound, CType) :-
 	functor(Compound, Type, _),
 	clingo_name(Type, CType).
+
+size_name('function->arguments', 'function->size') :- !.
+size_name('pool->arguments', 'pool->size') :- !.
+size_name(Name, SizeName) :-
+	atom_concat(Name, '_size', SizeName).
+
 
 		 /*******************************
 		 *	      UTIL		*
