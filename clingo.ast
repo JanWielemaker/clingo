@@ -97,8 +97,24 @@ theory_atom = TheoryAtom( location : Location
                              , term          : theory_term
                              )? ).
 
-body_atom = aggregate
+ body_literal = Literal(
+		   location: Location,
+		   sign	   : Sign,
+		   literal : literal)
+             | Conditional(
+		   location: Location,
+		   sign	   : Sign,
+		   conditional_literal : conditional_literal)
+             | Aggregate(
+		   location: Location,
+		   sign	   : Sign,
+		   aggregate : aggregate)
+             | TheoryAtom(
+		   location: Location,
+		   sign	   : Sign,
+		   theory_atom : theory_atom)
           | BodyAggregate( location    : Location
+                , sign     : Sign
              , left_guard  : aggregate_guard?
              , function    : AggregateFunction
              , elements    : BodyAggregateElement( tuple     : term*
@@ -107,20 +123,13 @@ body_atom = aggregate
              , right_guard : aggregate_guard?
              )
           | Disjoint( location : Location
+                , sign     : Sign
              , elements : DisjointElement( location  : Location
                            , tuple     : term*
                            , term      : csp_sum_term
                            , condition : literal*
                            )*
-             )
-          | theory_atom.
-
-body_literal = literal
-             | conditional_literal
-             | Literal( location : Location
-                , sign     : Sign
-                , atom     : body_atom
-                ).
+             ) .
 
 head = literal
      | aggregate
