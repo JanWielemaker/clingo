@@ -41,8 +41,13 @@ theory_term = Symbol( location : Location
             | Variable( location : Location
                , name     : str
                )
-            | TheoryTermSequence( location : Location
-               , sequence_type : TheorySequenceType
+            | Tuple( location : Location
+               , terms         : theory_term*
+               )
+            | List( location : Location
+               , terms         : theory_term*
+               )
+            | Set( location : Location
                , terms         : theory_term*
                )
             | TheoryFunction( location  : Location
@@ -64,7 +69,7 @@ literal = Comparison( comparison : ComparisonOperator
                          , left       : term
                          , right      : term
                          )
-	| BooleanConstant( value : bool
+	| Boolean( value : bool
 	   )
 	| symbolic_atom
         | CSPLiteral( location : Location

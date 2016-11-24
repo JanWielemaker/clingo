@@ -209,10 +209,23 @@ translate(Term) :-
 union_member(Name, Struct) :-
 	Struct =.. [Type|_Args],
 	clingo_name(Type, CType),
-	format('    case clingo_ast_~w_type_~w:~n', [Name, CType]),
+	enum_name(CType, ECType),
+	format('    case clingo_ast_~w_type_~w:~n', [Name, ECType]),
 	format('      return unify_ast_~w_u_~w(t, ast);~n',
 	       [CType, Name]).
 
+enum_name(theory_function, function) :- !.
+enum_name(theory_unparsed_term, unparsed_term) :- !.
+enum_name(symbolic_atom, symbolic) :- !.
+enum_name(csp_literal, csp) :- !.
+enum_name(Name, Name).
+
+
+%%	union_struct_member(UnionName, I, MemberName:Arg)
+
+union_struct_member(UnionName, I, MemberName:Arg) :-
+	debug(ast, '~p', [union_struct_member(UnionName, I, MemberName:Arg)]),
+	fail.
 union_struct_member(_, I, sign:Arg) :- !,
 	struct_member(I, sign:Arg).
 union_struct_member(_, I, location:Arg) :- !,
@@ -221,6 +234,10 @@ union_struct_member(_, I, symbol:Arg) :- !,
 	struct_member(I, symbol:Arg).
 union_struct_member(variable, I, name:Arg) :- !,
 	struct_member(I, variable:Arg).
+union_struct_member(theory_function, I, Arg) :- !,
+	union_struct_member(function, I, Arg).
+union_struct_member(theory_unparsed_term, I, Arg) :- !,
+	union_struct_member(unparsed_term, I, Arg).
 union_struct_member(Name, I, U:Arg) :-
 	format(atom(UName), '~w->~w', [Name, U]),
 	struct_member(I, UName:Arg).
@@ -232,8 +249,15 @@ struct_member(I, Arg) :-
 struct_member(I, Arg) :-
 	format('TODO: ~w, ~w~n', [I, Arg]).
 
+struct_member(Arg, _Tmp, _Indent) :-
+	debug(ast(struct_member), '~p', [struct_member(Arg)]),
+	fail.
 struct_member(Name:str, Tmp, Indent) :-
 	format('~t~*|  if ( !PL_unify_atom_chars(~w, ast->~w) )~n',
+	       [Indent, Tmp, Name]),
+	format('~t~*|    return FALSE;~n', [Indent]), !.
+struct_member(Name:bool, Tmp, Indent) :-
+	format('~t~*|  if ( !PL_unify_bool(~w, ast->~w) )~n',
 	       [Indent, Tmp, Name]),
 	format('~t~*|    return FALSE;~n', [Indent]), !.
 struct_member(Name:Type?, Tmp, Indent) :-
@@ -276,8 +300,14 @@ struct_member_name(Compound, CType) :-
 size_name('function->arguments', 'function->size') :- !.
 size_name('external_function->arguments', 'external_function->size') :- !.
 size_name('pool->arguments', 'pool->size') :- !.
+size_name('tuple->terms', 'tuple->size') :- !.
+size_name('list->terms', 'list->size') :- !.
+size_name('set->terms', 'set->size') :- !.
 size_name('terms', size) :- !.
+size_name('operators', size) :- !.
+size_name('unparsed_term->elements', 'unparsed_term->size') :- !.
 size_name(Name, SizeName) :-
+	debug(ast(size), '~p ~p', [Name, SizeName]),
 	atom_concat(Name, '_size', SizeName).
 
 
