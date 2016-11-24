@@ -104,7 +104,10 @@ arg_type(Type*) --> !,
 arg_type(Type+) --> !,
 	arg_type(Type).
 arg_type(Dotted) -->
-	{ functor(Dotted, ., 2) }, !.
+	{ Dotted =.. [.,Left,Right], !,
+	  format(atom(Flat), '~w_~w', [Left, Right])
+	},
+	arg_type(Flat).
 arg_type(Type) -->
 	{ compound(Type) }, !,
 	[ Type ],
@@ -117,11 +120,19 @@ declare(Name=Union) :-
 	format('static int \c
 	        unify_ast_~w(term_t t, const clingo_ast_~w_t *ast);~n',
 	       [Name, Name]), !.
-declare(Name=Struct) :-
-	Struct =.. [_Type|_Args],
+declare(symbolic_atom=_Struct) :-
+	format('static int \c
+		unify_ast_symbolic_atom(term_t t, const clingo_ast_term_t *ast);~n',
+	       []), !.
+declare(Name=_Struct) :-
 	format('static int \c
 		unify_ast_~w(term_t t, const clingo_ast_~w_t *ast);~n',
 	       [Name, Name]), !.
+declare(union_of(Name, Struct)) :-
+	struct_member_name(Struct, CType),
+	format('static int \c
+		unify_ast_~w_u_~w(term_t t, const clingo_ast_~w_t *ast);~n',
+	       [CType, Name, Name]), !.
 declare(Struct) :-
 	Struct \= (_=_),
 	struct_member_name(Struct, CType), !,
@@ -139,6 +150,22 @@ translate(Name=Union) :-
 	maplist(union_member(Name), Union),
 	format('  }~n', []),
 	format('}~n~n', []), !.
+translate(symbolic_atom=_Struct) :-
+	format('static int~n\c
+		unify_ast_symbolic_atom(term_t t, const clingo_ast_term_t *ast) {~n',
+	       []),
+	format('  term_t tmp = PL_new_term_ref();~n', []),
+	format('  static functor_t f = 0;~n~n', []),
+	format('  if ( !f )~n', []),
+	format('    f = PL_new_functor(PL_new_atom("symbolic_atom"), 1);~n',[]),
+	format('  if ( !PL_unify_functor(t, f) )~n', []),
+	format('    return FALSE;~n~n'),
+	format('  if ( !PL_get_arg(1, t, tmp) )~n', []),
+	format('    return FALSE;~n', []),
+	format('  if ( !unify_ast_term(tmp, ast) )~n', []),
+	format('    return FALSE;~n', []),
+	format('  return TRUE;~n', []),
+	format('}~n~n', []), !.
 translate(Name=Struct) :-
 	Struct =.. [_Type|Args],
 	format('static int~n\c
@@ -155,6 +182,23 @@ translate(Name=Struct) :-
 	       struct_member(I, Arg)),
 	format('  return TRUE;~n', []),
 	format('}~n~n', []), !.
+translate(union_of(Name, Struct)) :-
+	Struct =.. [_Type|Args],
+	struct_member_name(Struct, CType),
+	format('static int~n\c
+		unify_ast_~w_u_~w(term_t t, const clingo_ast_~w_t *ast) {~n',
+	       [CType, Name, Name]),
+	length(Args, Arity),
+	format('  term_t tmp = PL_new_term_ref();~n', []),
+	format('  static functor_t f = 0;~n~n', []),
+	format('  if ( !f )~n', []),
+	format('    f = PL_new_functor(PL_new_atom("~w"), ~w);~n', [CType, Arity]),
+	format('  if ( !PL_unify_functor(t, f) )~n', []),
+	format('    return FALSE;~n~n'),
+	forall(nth1(I, Args, Arg),
+	       union_struct_member(CType, I, Arg)),
+	format('  return TRUE;~n', []),
+	format('}~n~n', []), !.
 translate(Struct) :-
 	Struct \= (_=_),
 	struct_member_name(Struct, CType), !,
@@ -166,7 +210,16 @@ union_member(Name, Struct) :-
 	Struct =.. [Type|_Args],
 	clingo_name(Type, CType),
 	format('    case clingo_ast_~w_type_~w:~n', [Name, CType]),
-	format('      return unify_ast_~w(t, ast->~w);~n', [CType, CType]).
+	format('      return unify_ast_~w_u_~w(t, ast);~n',
+	       [CType, Name]).
+
+union_struct_member(_, I, sign:Arg) :- !,
+	struct_member(I, sign:Arg).
+union_struct_member(_, I, location:Arg) :- !,
+	struct_member(I, location:Arg).
+union_struct_member(Name, I, U:Arg) :-
+	format(atom(UName), '~w->~w', [Name, U]),
+	struct_member(I, UName:Arg).
 
 struct_member(I, Arg) :-
 	format('  if ( !PL_get_arg(~w, t, tmp) )~n', [I]),
@@ -234,8 +287,8 @@ camel_snake(Camel, Snake) :-
 	code_type(C, to_lower(C0)),
 	atom_codes(Snake, [C|SnakeCodes]).
 
-snake([0'c,0's,0'p|T]) -->
-	"CSP", !,
+snake([0's,0'p|T]) -->
+	"SP", !,
 	snake(T).
 snake([0'_,H|T]) -->
 	[C],
