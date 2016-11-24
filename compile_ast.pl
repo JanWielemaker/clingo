@@ -274,7 +274,9 @@ struct_member_name(Compound, CType) :-
 	clingo_name(Type, CType).
 
 size_name('function->arguments', 'function->size') :- !.
+size_name('external_function->arguments', 'external_function->size') :- !.
 size_name('pool->arguments', 'pool->size') :- !.
+size_name('terms', size) :- !.
 size_name(Name, SizeName) :-
 	atom_concat(Name, '_size', SizeName).
 
