@@ -184,8 +184,8 @@ struct_member(Name:Type?, Tmp, Indent) :-
 struct_member(Name:Type*, Tmp, Indent) :-
 	format('~t~*|  {~n', [Indent]),
 	format('~t~*|    int i;~n', [Indent]),
-	format('~t~*|    term_t head	PL_copy_term_ref(~w);~n', [Indent, Tmp]),
-	format('~t~*|    term_t tail	PL_new_term_ref();~n~n', [Indent]),
+	format('~t~*|    term_t head = PL_copy_term_ref(~w);~n', [Indent, Tmp]),
+	format('~t~*|    term_t tail = PL_new_term_ref();~n~n', [Indent]),
 	format('~t~*|    for(i=0; i<ast->~w_size; i++) {~n', [Indent, Name]),
 	format('~t~*|      if ( !PL_unify_list(tail, head, tail) )~n', [Indent]),
 	format('~t~*|        return FALSE;~n', [Indent]),
@@ -230,6 +230,9 @@ camel_snake(Camel, Snake) :-
 	code_type(C, to_lower(C0)),
 	atom_codes(Snake, [C|SnakeCodes]).
 
+snake([0'c,0's,0'p|T]) -->
+	"CSP", !,
+	snake(T).
 snake([0'_,H|T]) -->
 	[C],
 	{ code_type(C, upper), !,
