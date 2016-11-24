@@ -5,6 +5,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
+#include "clingo_ast.h"
 
 #define FAST_PARAMS 10
 
@@ -109,14 +110,16 @@ static int get_clingo(term_t t, clingo_env **ccontrol) {
 
         assert(ar->magic == CLINGO_MAGIC);
         if (!ar->clingo->control) {
-            return PL_existence_error("clingo", t);
+            PL_existence_error("clingo", t);
+            return FALSE;
         }
         *ccontrol = ar->clingo;
 
         return TRUE;
     }
 
-    return PL_type_error("clingo", t);
+    PL_type_error("clingo", t);
+    return FALSE;
 }
 
 ////////////////////////////// PREDICATES //////////////////////////////
@@ -381,7 +384,7 @@ out:
     return rc;
 }
 
-static int unify_value(term_t t, clingo_symbol_t v) {
+int unify_value(term_t t, clingo_symbol_t v) {
     // NOTE: the clingo_symbol_* functions below only fail
     //       if applied to the wrong type
     //       they do not allocate
@@ -556,6 +559,30 @@ typedef struct solve_state {
     clingo_env *ctl;
     clingo_solve_iteratively_t *it;
 } solve_state;
+
+typedef struct {
+  term_t head;
+  term_t tail;
+} on_statement_context_t;
+
+bool on_statement(clingo_ast_statement_t const *stm, on_statement_context_t *context) {
+  if (!PL_unify_list(context->tail, context->head, context->tail)) {
+    return FALSE;
+  }
+  return unify_ast_statement(context->head, stm);
+}
+
+static foreign_t pl_clingo_parse_program(term_t text, term_t ast) {
+  char *program;
+  on_statement_context_t context;
+  context.tail = PL_copy_term_ref(ast);
+  context.head = PL_new_term_ref();
+  if (!PL_get_chars(text, &program, CVT_ATOMIC | CVT_EXCEPTION))
+    return FALSE;
+  if (!clingo_parse_program(program, (clingo_ast_callback_t)on_statement, &context, NULL, NULL, 20))
+    return FALSE;
+  return PL_unify_nil(context.tail);
+}
 
 static foreign_t pl_clingo_solve(term_t ccontrol, term_t assumptions,
                                  term_t Show, term_t Model, control_t h) {
@@ -823,6 +850,7 @@ install_t install_clingo(void) {
     PL_register_foreign("clingo_close", 1, pl_clingo_close, 0);
     PL_register_foreign("clingo_add", 3, pl_clingo_add, 0);
     PL_register_foreign("clingo_ground", 2, pl_clingo_ground, 0);
+    PL_register_foreign("clingo_parse", 2, pl_clingo_parse_program, 0);
     PL_register_foreign("clingo_solve", 4, pl_clingo_solve,
                         PL_FA_NONDETERMINISTIC);
     PL_register_foreign("clingo_assign_external", 3, pl_clingo_assign_external,

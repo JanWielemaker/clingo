@@ -38,6 +38,7 @@
 	    clingo_load/2,		% +Clingo, +File
 	    clingo_load/3,		% +Clingo, +File, +Parameters
 	    clingo_ground/2,		% +Clingo, +Parameters
+	    clingo_parse/2,		% +String, -AST
 	    clingo_solve/2,		% +Clingo, -Model
 	    clingo_solve/3,		% +Clingo, +Assumptions, -Model
 	    clingo_solve/4,		% +Clingo, +Assumptions, +Show, -Model

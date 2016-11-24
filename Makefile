@@ -29,7 +29,7 @@ FLAGS:
 	echo "PLFLAGS=-pl \$$(SWIPL)" >> FLAGS
 	echo "COFLAGS=$(COFLAGS)" >> FLAGS
 
-SRC=clingo.c
+SRC=clingo.c clingo_ast.c
 
 .PHONY: clean
 
