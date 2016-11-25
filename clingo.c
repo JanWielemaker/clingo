@@ -18,14 +18,13 @@ static atom_t ATOM_shown;
 static atom_t ATOM_csp;
 static atom_t ATOM_comp;
 static atom_t ATOM_fact;
-static atom_t ATOM_nofact;
 static atom_t ATOM_external;
-static atom_t ATOM_noexternal;
+static atom_t ATOM_unknown;
 static functor_t FUNCTOR_hash1;
 static functor_t FUNCTOR_tilde1;
 static functor_t FUNCTOR_error2;
 static functor_t FUNCTOR_clingo_error1;
-static functor_t FUNCTOR_symbol3;
+static functor_t FUNCTOR_symbol2;
 
 static bool get_value(term_t t, clingo_symbol_t *val, int minus);
 
@@ -659,10 +658,9 @@ static int unify_symbolic_atom(term_t result, clingo_symbolic_atoms_t *atoms, cl
     term_t symbol = PL_new_term_ref();
     return unify_value(symbol, val) &&
             PL_unify_term(result,
-                          PL_FUNCTOR, FUNCTOR_symbol3,
+                          PL_FUNCTOR, FUNCTOR_symbol2,
                           PL_TERM, symbol,
-                          PL_ATOM, fact ? ATOM_fact : ATOM_nofact,
-                          PL_ATOM, external ? ATOM_external : ATOM_noexternal);
+                          PL_ATOM, fact ? ATOM_fact : (external ? ATOM_external : ATOM_unknown));
 }
 
 static foreign_t pl_symbol_lookup(term_t control, term_t symbol, term_t result) {
@@ -848,13 +846,12 @@ install_t install_clingo(void) {
     ATOM_csp = PL_new_atom("csp");
     ATOM_comp = PL_new_atom("comp");
     ATOM_fact = PL_new_atom("fact");
-    ATOM_nofact = PL_new_atom("nofact");
     ATOM_external = PL_new_atom("external");
-    ATOM_noexternal = PL_new_atom("noexternal");
+    ATOM_unknown = PL_new_atom("unknown");
     FUNCTOR_hash1 = PL_new_functor(ATOM_hash, 1);
     FUNCTOR_tilde1 = PL_new_functor(PL_new_atom("~"), 1);
     FUNCTOR_clingo_error1 = PL_new_functor(PL_new_atom("clingo_error"), 1);
-    FUNCTOR_symbol3 = PL_new_functor(PL_new_atom("symbol"), 3);
+    FUNCTOR_symbol2 = PL_new_functor(PL_new_atom("symbol"), 2);
     FUNCTOR_error2 = PL_new_functor(PL_new_atom("error"), 2);
 
     PL_register_foreign("clingo_new", 2, pl_clingo_new, 0);
