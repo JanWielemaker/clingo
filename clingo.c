@@ -25,6 +25,7 @@ static functor_t FUNCTOR_tilde1;
 static functor_t FUNCTOR_error2;
 static functor_t FUNCTOR_clingo_error1;
 static functor_t FUNCTOR_symbol2;
+static functor_t FUNCTOR_symbolic_atoms2;
 
 static bool get_value(term_t t, clingo_symbol_t *val, int minus);
 
@@ -678,6 +679,40 @@ static foreign_t pl_symbol_lookup(term_t control, term_t symbol, term_t result) 
         clingo_status(clingo_symbolic_atoms_is_valid(atoms, it, &valid)) &&
         valid && unify_symbolic_atom(result, atoms, it);
 }
+
+static foreign_t pl_symbol_list_next(term_t context, term_t slice, term_t list, term_t diff_tail) {
+    clingo_symbolic_atoms_t *atoms;
+    clingo_symbolic_atom_iterator_t it;
+    term_t tmp = PL_new_term_ref();
+    int i, n;
+    if (!(PL_get_arg(1, context, tmp) &&
+            PL_get_pointer_ex(tmp, (void**)&atoms) &&
+            PL_get_arg(2, context, tmp) &&
+            PL_get_int64_ex(tmp, (int64_t*)&it) &&
+            PL_get_integer_ex(slice, &n))) { return FALSE; }
+    term_t tail = PL_copy_term_ref(list);
+    term_t head = PL_new_term_ref();
+    for (i = 0; i != n; ++i) {
+        bool valid;
+        if (!clingo_status(clingo_symbolic_atoms_is_valid(atoms, it, &valid))) { return FALSE; }
+        if (valid) {
+            if (!(PL_unify_list(tail, head, tail) && unify_symbolic_atom(head, atoms, it))) { return FALSE; }
+        }
+        else { break; }
+    }
+    return PL_unify(tail, diff_tail);
+}
+
+static foreign_t pl_symbol_list(term_t control, term_t context) {
+    clingo_env *ccontrol;
+    clingo_symbolic_atoms_t *atoms;
+    clingo_symbolic_atom_iterator_t it;
+    return
+        get_clingo(control, &ccontrol) &&
+        clingo_status(clingo_control_symbolic_atoms(ccontrol->control, &atoms)) &&
+        clingo_status(clingo_symbolic_atoms_begin(atoms, NULL, &it)) &&
+        PL_unify_term(context, PL_FUNCTOR, FUNCTOR_symbolic_atoms2, PL_POINTER, atoms, PL_INT64, (int64_t)it);
+}
 ////////////////////////////// CALLBACK //////////////////////////////
 
 static bool get_value(term_t t, clingo_symbol_t *val, int minus) {
@@ -852,6 +887,7 @@ install_t install_clingo(void) {
     FUNCTOR_tilde1 = PL_new_functor(PL_new_atom("~"), 1);
     FUNCTOR_clingo_error1 = PL_new_functor(PL_new_atom("clingo_error"), 1);
     FUNCTOR_symbol2 = PL_new_functor(PL_new_atom("symbol"), 2);
+    FUNCTOR_symbolic_atoms2 = PL_new_functor(PL_new_atom("$symbolic_atoms"), 2);
     FUNCTOR_error2 = PL_new_functor(PL_new_atom("error"), 2);
 
     PL_register_foreign("clingo_new", 2, pl_clingo_new, 0);
@@ -866,4 +902,8 @@ install_t install_clingo(void) {
                         pl_clingo_release_external, 0);
     PL_register_foreign("clingo_symbol_lookup", 3,
                         pl_symbol_lookup, 0);
+    PL_register_foreign("clingo_symbol_list", 2,
+                        pl_symbol_list, 0);
+    PL_register_foreign("clingo_symbol_list_next", 4,
+                        pl_symbol_list_next, 0);
 }
