@@ -17,10 +17,15 @@ static atom_t ATOM_terms;
 static atom_t ATOM_shown;
 static atom_t ATOM_csp;
 static atom_t ATOM_comp;
+static atom_t ATOM_fact;
+static atom_t ATOM_nofact;
+static atom_t ATOM_external;
+static atom_t ATOM_noexternal;
 static functor_t FUNCTOR_hash1;
 static functor_t FUNCTOR_tilde1;
 static functor_t FUNCTOR_error2;
 static functor_t FUNCTOR_clingo_error1;
+static functor_t FUNCTOR_symbol3;
 
 static bool get_value(term_t t, clingo_symbol_t *val, int minus);
 
@@ -638,6 +643,43 @@ out:
     return rc;
 }
 
+static int unify_symbolic_atom(term_t result, clingo_symbolic_atoms_t *atoms, clingo_symbolic_atom_iterator_t it) {
+    clingo_symbol_t val;
+    if (!clingo_status(clingo_symbolic_atoms_symbol(atoms, it, &val))) {
+        return FALSE;
+    }
+    bool fact;
+    if (!clingo_status(clingo_symbolic_atoms_is_fact(atoms, it, &fact))) {
+        return FALSE;
+    }
+    bool external;
+    if (!clingo_status(clingo_symbolic_atoms_is_external(atoms, it, &external))) {
+        return FALSE;
+    }
+    term_t symbol = PL_new_term_ref();
+    return unify_value(symbol, val) &&
+            PL_unify_term(result,
+                          PL_FUNCTOR, FUNCTOR_symbol3,
+                          PL_TERM, symbol,
+                          PL_ATOM, fact ? ATOM_fact : ATOM_nofact,
+                          PL_ATOM, external ? ATOM_external : ATOM_noexternal);
+}
+
+static foreign_t pl_symbol_lookup(term_t control, term_t symbol, term_t result) {
+    clingo_env *ccontrol;
+    clingo_symbolic_atoms_t *atoms;
+    clingo_symbol_t val;
+    clingo_symbolic_atom_iterator_t it;
+    bool valid;
+
+    return
+        get_clingo(control, &ccontrol) &&
+        clingo_status(clingo_control_symbolic_atoms(ccontrol->control, &atoms)) &&
+        get_value(symbol, &val, FALSE) &&
+        clingo_status(clingo_symbolic_atoms_find(atoms, val, &it)) &&
+        clingo_status(clingo_symbolic_atoms_is_valid(atoms, it, &valid)) &&
+        valid && unify_symbolic_atom(result, atoms, it);
+}
 ////////////////////////////// CALLBACK //////////////////////////////
 
 static bool get_value(term_t t, clingo_symbol_t *val, int minus) {
@@ -805,9 +847,14 @@ install_t install_clingo(void) {
     ATOM_shown = PL_new_atom("shown");
     ATOM_csp = PL_new_atom("csp");
     ATOM_comp = PL_new_atom("comp");
+    ATOM_fact = PL_new_atom("fact");
+    ATOM_nofact = PL_new_atom("nofact");
+    ATOM_external = PL_new_atom("external");
+    ATOM_noexternal = PL_new_atom("noexternal");
     FUNCTOR_hash1 = PL_new_functor(ATOM_hash, 1);
     FUNCTOR_tilde1 = PL_new_functor(PL_new_atom("~"), 1);
     FUNCTOR_clingo_error1 = PL_new_functor(PL_new_atom("clingo_error"), 1);
+    FUNCTOR_symbol3 = PL_new_functor(PL_new_atom("symbol"), 3);
     FUNCTOR_error2 = PL_new_functor(PL_new_atom("error"), 2);
 
     PL_register_foreign("clingo_new", 2, pl_clingo_new, 0);
@@ -820,4 +867,6 @@ install_t install_clingo(void) {
                         0);
     PL_register_foreign("clingo_release_external", 2,
                         pl_clingo_release_external, 0);
+    PL_register_foreign("clingo_symbol_lookup", 3,
+                        pl_symbol_lookup, 0);
 }
