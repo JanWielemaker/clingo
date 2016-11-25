@@ -717,7 +717,10 @@ static foreign_t pl_symbol(term_t control, term_t result, control_t h) {
         if (!(rc = clingo_status(clingo_symbolic_atoms_is_valid(state->atoms, state->it, &valid)))) {
             goto out;
         }
-        if (!valid) { goto out; }
+        if (!valid) {
+            rc = FALSE;
+            goto out;
+        }
         unified = unify_symbolic_atom(result, state->atoms, state->it);
         if (!unified && PL_exception(0)) {
             rc = FALSE;
