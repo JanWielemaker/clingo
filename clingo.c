@@ -546,7 +546,7 @@ out:
 
 typedef struct solve_state {
     clingo_env *ctl;
-    clingo_solve_iteratively_t *it;
+    clingo_solve_handle_t *it;
 } solve_state;
 
 static foreign_t pl_clingo_solve(term_t ccontrol, term_t assumptions,
@@ -587,8 +587,9 @@ static foreign_t pl_clingo_solve(term_t ccontrol, term_t assumptions,
             }
         }
 
-        if (!(rc = clingo_status(clingo_control_solve_iteratively(
-                  state->ctl->control, assump_vec, alen, &state->it)))) {
+        if (!(rc = clingo_status(clingo_control_solve(
+                  state->ctl->control, clingo_solve_mode_yield,
+                  assump_vec, alen, NULL, NULL, &state->it)))) {
             goto out;
         }
     } else {
@@ -599,7 +600,11 @@ static foreign_t pl_clingo_solve(term_t ccontrol, term_t assumptions,
         clingo_model_t *model;
 
         if (!(rc = clingo_status(
-                  clingo_solve_iteratively_next(state->it, &model)))) {
+                  clingo_solve_handle_resume(state->it)))) {
+            goto out;
+        }
+        if (!(rc = clingo_status(
+                  clingo_solve_handle_model(state->it, &model)))) {
             goto out;
         }
         if (model) {
@@ -631,7 +636,7 @@ out:
     }
     if (state) {
         if (state->it) {
-            clingo_solve_iteratively_close(state->it);
+            clingo_solve_handle_close(state->it);
         }
         free(state);
     }
