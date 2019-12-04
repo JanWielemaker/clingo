@@ -123,8 +123,6 @@ static int get_clingo(term_t t, clingo_env **ccontrol) {
     return PL_type_error("clingo", t);
 }
 
-////////////////////////////// PREDICATES //////////////////////////////
-
 static bool clingo_status(bool ret) {
     if (!ret) {
         term_t ex;
@@ -139,6 +137,50 @@ static bool clingo_status(bool ret) {
 
     return ret;
 }
+
+static int get_atom(clingo_control_t *ctl, term_t t, clingo_literal_t *assump) {
+    int rc;
+    bool valid = TRUE;
+    clingo_symbol_t symbol;
+    clingo_symbolic_atoms_t const *atoms;
+    clingo_symbolic_atom_iterator_t it;
+
+    if (!(rc = clingo_status(clingo_control_symbolic_atoms(ctl, &atoms)))) {
+        goto out;
+    }
+    if (!(rc = get_value(t, &symbol, FALSE))) {
+        goto out;
+    }
+    if (!(rc = clingo_status(clingo_symbolic_atoms_find(atoms, symbol, &it)))) {
+        goto out;
+    }
+    if (!(rc = clingo_status(clingo_symbolic_atoms_is_valid(atoms, it, &valid)))) {
+        goto out;
+    }
+    if (valid) {
+        if (!(rc = clingo_status(clingo_symbolic_atoms_literal(atoms, it, assump)))) {
+            goto out;
+        }
+    }
+    else {
+        *assump = 0;
+    }
+out:
+    return rc;
+}
+
+static int get_literal(clingo_control_t *ctl, term_t t, int *sign, clingo_literal_t *assump) {
+    if (PL_is_functor(t, FUNCTOR_tilde1)) {
+        _PL_get_arg(1, t, t);
+        *sign = -1;
+    }
+    else {
+        *sign = 1;
+    }
+    return get_atom(ctl, t, assump);
+}
+
+////////////////////////////// PREDICATES //////////////////////////////
 
 static foreign_t pl_clingo_new(term_t ccontrol, term_t options) {
     (void)options;
@@ -333,15 +375,11 @@ out:
 static foreign_t pl_clingo_assign_external(term_t ccontrol, term_t Atom,
                                            term_t Value) {
     clingo_env *ctl;
-    clingo_symbol_t atom;
+    clingo_literal_t literal;
     clingo_truth_value_t value;
     int bv, rc;
 
     if (!(rc = get_clingo(ccontrol, &ctl))) {
-        goto out;
-    }
-
-    if (!(rc = clingo_status(get_value(Atom, &atom, FALSE)))) {
         goto out;
     }
 
@@ -354,30 +392,33 @@ static foreign_t pl_clingo_assign_external(term_t ccontrol, term_t Atom,
         goto out;
     }
 
-    if (!(rc = clingo_status(
-              clingo_control_assign_external(ctl->control, atom, value)))) {
+    if (!(rc = get_atom(ctl->control, Atom, &literal))) {
         goto out;
     }
 
+    if (!(rc = clingo_status(
+              clingo_control_assign_external(ctl->control, literal, value)))) {
+        goto out;
+    }
 out:
     return rc;
 }
 
 static foreign_t pl_clingo_release_external(term_t ccontrol, term_t Atom) {
     clingo_env *ctl;
-    clingo_symbol_t atom;
+    clingo_literal_t literal;
     int rc;
 
     if (!(rc = get_clingo(ccontrol, &ctl))) {
         goto out;
     }
 
-    if (!(rc = clingo_status(get_value(Atom, &atom, FALSE)))) {
+    if (!(rc = get_atom(ctl->control, Atom, &literal))) {
         goto out;
     }
 
     if (!(rc = clingo_status(
-              clingo_control_release_external(ctl->control, atom)))) {
+              clingo_control_release_external(ctl->control, literal)))) {
         goto out;
     }
 
@@ -475,7 +516,7 @@ out:
     return rc;
 }
 
-static int unify_model(term_t t, int show, clingo_model_t *model) {
+static int unify_model(term_t t, int show, clingo_model_t const *model) {
     clingo_symbol_t *atoms = NULL;
     size_t alen;
     int rc;
@@ -500,17 +541,6 @@ static int unify_model(term_t t, int show, clingo_model_t *model) {
 out:
     free(atoms);
     return rc;
-}
-
-static int get_assumption(term_t t, clingo_symbolic_literal_t *assump) {
-    if (PL_is_functor(t, FUNCTOR_tilde1)) {
-        _PL_get_arg(1, t, t);
-        assump->positive = FALSE;
-    } else {
-        assump->positive = TRUE;
-    }
-
-    return get_value(t, &assump->symbol, FALSE);
 }
 
 static int get_show_map(term_t t, int *map) {
@@ -558,7 +588,7 @@ static foreign_t pl_clingo_solve(term_t ccontrol, term_t assumptions,
                                  term_t Show, term_t Model, control_t h) {
     int rc = TRUE;
     solve_state *state = NULL;
-    clingo_symbolic_literal_t *assump_vec = NULL;
+    clingo_literal_t *assump_vec = NULL;
     int control = PL_foreign_control(h);
     if (control == PL_FIRST_CALL) {
         size_t alen = 0;
@@ -581,14 +611,28 @@ static foreign_t pl_clingo_solve(term_t ccontrol, term_t assumptions,
         term_t tail = PL_copy_term_ref(assumptions);
         term_t head = PL_new_term_ref();
 
+        if (alen < 2) { alen = 2; }
         if (!(assump_vec = malloc(sizeof(*assump_vec) * alen))) {
             rc = PL_resource_error("memory");
             goto out;
         }
         memset(assump_vec, 0, sizeof(*assump_vec) * alen);
+
+        alen = 0;
         for (size_t i = 0; PL_get_list(tail, head, tail); i++) {
-            if (!(rc = clingo_status(get_assumption(head, &assump_vec[i])))) {
+            int sign;
+            clingo_literal_t lit;
+
+            if (!(rc = clingo_status(get_literal(state->ctl->control, head, &sign, &lit)))) {
                 goto out;
+            }
+
+            if (lit) { assump_vec[alen++] = sign * lit; }
+            else if (sign > 0) {
+                assump_vec[0] =  1;
+                assump_vec[1] = -1;
+                alen = 2;
+                break;
             }
         }
 
@@ -602,7 +646,7 @@ static foreign_t pl_clingo_solve(term_t ccontrol, term_t assumptions,
     }
 
     while (control != PL_PRUNED) {
-        clingo_model_t *model;
+        clingo_model_t const *model;
 
         if (!(rc = clingo_status(
                   clingo_solve_handle_resume(state->it)))) {
@@ -648,7 +692,7 @@ out:
     return rc;
 }
 
-static int unify_symbolic_atom(term_t result, clingo_symbolic_atoms_t *atoms, clingo_symbolic_atom_iterator_t it) {
+static int unify_symbolic_atom(term_t result, clingo_symbolic_atoms_t const *atoms, clingo_symbolic_atom_iterator_t it) {
     clingo_symbol_t val;
     if (!clingo_status(clingo_symbolic_atoms_symbol(atoms, it, &val))) {
         return FALSE;
@@ -671,7 +715,7 @@ static int unify_symbolic_atom(term_t result, clingo_symbolic_atoms_t *atoms, cl
 
 static foreign_t pl_symbol_lookup(term_t control, term_t symbol, term_t result) {
     clingo_env *ccontrol;
-    clingo_symbolic_atoms_t *atoms;
+    clingo_symbolic_atoms_t const *atoms;
     clingo_symbol_t val;
     clingo_symbolic_atom_iterator_t it;
     bool valid;
@@ -686,7 +730,7 @@ static foreign_t pl_symbol_lookup(term_t control, term_t symbol, term_t result) 
 }
 
 typedef struct symbol_state {
-    clingo_symbolic_atoms_t *atoms;
+    clingo_symbolic_atoms_t const *atoms;
     clingo_symbolic_atom_iterator_t it;
 } symbol_state;
 
@@ -755,7 +799,7 @@ static bool get_value(term_t t, clingo_symbol_t *val, int minus) {
 
         if (PL_get_integer(t, &i)) {
             clingo_symbol_create_number(i, val);
-            return true;
+            return TRUE;
         }
         return FALSE;
     }
@@ -856,7 +900,7 @@ static bool call_function(clingo_location_t const *loc, char const *name,
     fid_t fid = 0;
     qid_t qid = 0;
     term_t av;
-    bool rc = true;
+    bool rc = TRUE;
 
     if (!pred) {
         pred = PL_predicate("inject_values", 3, "clingo");

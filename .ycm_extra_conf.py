@@ -39,7 +39,7 @@ import glob
 def swipl_include():
     inc = os.path.expanduser("~/local/opt/swi-prolog/lib/swipl/include")
     if os.path.isdir(inc): return ['-I{0}'.format(inc)]
-    inc = glob.glob("/usr/lib64/swipl-*/include")
+    inc = glob.glob("/usr/lib64/swipl*/include")
     if len(inc) > 0: return ['-I{0}'.format(inc[0])]
     return []
 
@@ -55,7 +55,7 @@ flags = [
 '-DNDEBUG',
 '-xc++',
 '-std=c99',
-'-I{home}/clingo-5/libclingo'.format(home=os.path.expanduser("~")),
+'-I{home}/git/clingo/libclingo'.format(home=os.path.expanduser("~")),
 ] + swipl_include()
 
 # Set this to the absolute path to the folder (NOT the file!) containing the
