@@ -4,20 +4,9 @@ This repository contains work in progress for embedding the Clingo ASP
 solver in SWI-Prolog.  To use this, you need:
 
   - Clingo.  You need clingo version 5, which is available on github:
-
-    ```{shell}
-    git clone https://github.com/potassco/clingo.git
-    ```
-
-  - A recent copy of the _development_ version of SWI-Prolog (7.3.x)
-
-Please consult the file `INSTALL` in   the downloaded clingo version and
-build   the   target    **libclingo**    as     shown    below.    Omit
-`--build-dir=release` to compile the debug version.
-
-```{shell}
-scons --build-dir=release libclingo
-```
+    - https://github.com/potassco/clingo
+  - A recent copy of SWI-Prolog (>= 7.3.x):
+    - https://www.swi-prolog.org/
 
 After both SWI-Prolog and Clingo are installed, edit the `Makefile` to
 suit your installation. See instructions in the file. After that running
@@ -29,8 +18,8 @@ tested by running e.g.:
 ?- map_color(Colors).
 ```
 
-Finally, the system is installed as a SWI-Prolog library using `make
-install`.
+Finally, the system can be installed as a SWI-Prolog library using 
+`make install`.
 
 
 ## Status
@@ -41,7 +30,7 @@ Clingo program from a string or loading one from a file or from a (not
 yet settled) representation as a Prolog term. The program can be asked
 for its stable models (if any) on backtracking. A model is represented
 as a Prolog list of ground _atoms_ in the predicate logic sense.  The
-interface suppors Clingo's abilities to deal with external data and a
+interface supports Clingo's abilities to deal with external data and a
 changing world:
 
   - Clingo atoms may refer to a Prolog predicate
@@ -65,7 +54,7 @@ changing world:
 ### Further reading:
 
   - The Clingo user guide can be found here
-    - http://sourceforge.net/projects/potassco/files/guide/2.0/
+    - https://github.com/potassco/guide/releases
   - The Clingo C API is documented here
-    - https://potassco.github.io/clingo/
+    - https://potassco.org/clingo/
 
