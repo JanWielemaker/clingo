@@ -46,6 +46,8 @@
 
 	    clingo_model/2,		% +Clingo, -Model
 
+	    clingo_symbol_lookup/3,	% +Clingo, +Symbol, -Info
+
 	    begin_clingo/1,		% +ProgAndParams
 	    end_clingo/0,
 

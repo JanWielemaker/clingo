@@ -31,6 +31,11 @@ FLAGS:
 
 SRC=clingo.c
 
+.PHONY: check
+
+check:
+	swipl -p library=. -p foreign=. -f test_clingo.pl -g test_clingo,halt -t 'halt(1)' -q
+
 .PHONY: clean
 
 clean:
