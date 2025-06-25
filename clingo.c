@@ -15,7 +15,6 @@ static atom_t ATOM_hash;
 static atom_t ATOM_atoms;
 static atom_t ATOM_terms;
 static atom_t ATOM_shown;
-static atom_t ATOM_csp;
 static atom_t ATOM_comp;
 static atom_t ATOM_fact;
 static atom_t ATOM_external;
@@ -562,8 +561,6 @@ static int get_show_map(term_t t, int *map) {
             *map |= clingo_show_type_terms;
         } else if (a == ATOM_shown) {
             *map |= clingo_show_type_shown;
-        } else if (a == ATOM_csp) {
-            *map |= clingo_show_type_csp;
         } else if (a == ATOM_comp) {
             *map |= clingo_show_type_complement;
         } else {
@@ -955,7 +952,6 @@ install_t install_clingo(void) {
     ATOM_atoms = PL_new_atom("atoms");
     ATOM_terms = PL_new_atom("terms");
     ATOM_shown = PL_new_atom("shown");
-    ATOM_csp = PL_new_atom("csp");
     ATOM_comp = PL_new_atom("comp");
     ATOM_fact = PL_new_atom("fact");
     ATOM_external = PL_new_atom("external");
