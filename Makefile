@@ -2,32 +2,15 @@
 # Build the Clingo interface for SWI-Prolog
 ################################################################
 
--include FLAGS
-
-CLINGOHOME?=${HOME}/clingo
-BUILD?=debug
-
-SWIPLLD?=swipl-ld
-SWIPL?=swipl
-
-COFLAGS?=-gdwarf-2 -g3 -O0
-
-CLINGOLIBDIR=$(CLINGOHOME)/build/$(BUILD)/bin
-CFLAGS=-I$(CLINGOHOME)/libclingo -W -Wall $(COFLAGS)
-LIBS=-L$(CLINGOLIBDIR) -lclingo
-LDFLAGS=-cc-options,-std=c99 -Wl,-rpath=/home/wv/bin/linux/64/swipl/lib/swipl-7.3.15/lib/x86_64-linux -shared
+SWIPLLD=swipl-ld
+SWIPL=swipl
+PLFLAGS=-pl $(SWIPL)
+CFLAGS=-W -Wall -gdwarf-2 -g3 -O0
+LDFLAGS=-cc-options,-std=c99 -shared
+LIBS=-lclingo
 SO=so
 
 all: clingo.$(SO)
-
-FLAGS:
-	rm -f FLAGS
-	echo "CLINGOHOME:=$(CLINGOHOME)" >> FLAGS
-	echo "BUILD:=$(BUILD)" >> FLAGS
-	echo "SWIPLLD:=$(SWIPLLD)" >> FLAGS
-	echo "SWIPL=$(SWIPL)" >> FLAGS
-	echo "PLFLAGS=-pl \$$(SWIPL)" >> FLAGS
-	echo "COFLAGS=$(COFLAGS)" >> FLAGS
 
 SRC=clingo.c
 
@@ -41,7 +24,7 @@ check:
 clean:
 	rm -f clingo.$(SO)
 
-clingo.$(SO): $(SRC) FLAGS
+clingo.$(SO): $(SRC)
 	$(SWIPLLD) $(PLFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $(SRC) $(LIBS)
 
 install: clingo.$(SO)
